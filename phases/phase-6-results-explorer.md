@@ -1,0 +1,38 @@
+# Phase 6: Results Explorer
+
+**Goal:** answer "which variant should I ship on which device" from the data, quickly and without leaving the page.
+
+## Before charts
+Load `dataviz` and write down the palette, series order and light/dark values once; use them for every chart here and in the Phase 7
+figures. Colour must not be the only cue (marker shape or label too). Reuse the Phase 1 tokens.
+
+## Build
+- Filterable, sortable, groupable table (device / format / precision), virtualized (TanStack Table + virtual rows), debounced
+  filters, saved views, CSV and Parquet export.
+- Charts (Apache ECharts, memoized, code-split):
+  - accuracy vs latency scatter with the **Pareto front highlighted** and a one-line explanation of how the front is computed;
+  - latency box plots with confidence intervals;
+  - threads vs FPS lines;
+  - temperature over time with throttle events marked;
+  - per-class AP heatmap, with a switch to split any accuracy view by **capture source** (`rpi-cam3-wide` vs `mobile`), so a model
+    that is good on phone photos but weak on the Pi camera shows up;
+  - model/variant by capture-source accuracy table (the headline view for a dataset built from real-world variation);
+  - drift chart per variant against the baseline.
+- Compare view: up to 4 runs side by side (config, metrics, differences marked significant or not).
+- **Failure browser:** for a chosen run, the images where it missed, mis-classified or hallucinated, ordered by severity, with
+  ground truth and prediction boxes; select frames and export them as a folder for the next annotation round.
+- Dashboard highlights: "fastest on Pi 5 within 1% mAP of baseline" computed from the data with the rule shown.
+- Invalid-for-latency runs are visibly marked and excluded by default from speed charts.
+
+## Acceptance
+- A fixture of ~500 result rows renders in the table with smooth scrolling (virtualization verified in the browser).
+- Pareto front test with hand-built points including ties and dominated points.
+- Every chart has an accessible description and a data-table fallback; both themes pass contrast.
+- Demo seed (finished in Phase 8, but a minimal seeded dataset is used here) shows all charts populated.
+
+## Skills
+`dataviz` (first), `frontend-design`, `claude-in-chrome` (look at every chart in both themes and at tablet width), `simplify`,
+`code-review`, `run`. `/ponytail lite`.
+
+## Risks
+Overplotting with large sweeps: aggregate by configuration first, drill down second.

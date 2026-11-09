@@ -1,0 +1,27 @@
+# runtime data and artifacts
+data/
+spikes/
+
+# environments and build output
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+playwright-report/
+test-results/
+
+# secrets (agent tokens, server settings)
+.env
+.env.*
+!.env.example
+
+# model and dataset files are content-addressed in data/, never committed
+*.pt
+*.onnx
+*.bin
+*.engine
+*.param
