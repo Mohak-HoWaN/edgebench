@@ -1,0 +1,6 @@
+# Keeps pip from swapping the CUDA build of torch for a CPU one while resolving the other packages (it tried to in Phase 0).
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+numpy==2.2.6
+opencv-python==4.12.0.88
+opencv-python-headless==4.12.0.88
