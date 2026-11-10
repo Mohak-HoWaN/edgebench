@@ -82,10 +82,10 @@ on each agent by hash.
 
 | # | File | Result you can see |
 |---|---|---|
-| 0 | `phases/phase-0-spikes.md` | A one-page verdict on each risky dependency (ncnn, OpenVINO on ARM, ONNX INT8, TensorRT, Tectonic) |
-| 1 | `phases/phase-1-scaffold.md` | App opens with navigation, themes, health check, empty states |
-| 2 | `phases/phase-2-models-conversion.md` | Upload `yolo11n.pt`, see the conversion grid fill in |
-| 3 | `phases/phase-3-datasets-first-run.md` | Import a dataset, run one benchmark on the PC with mAP and latency |
+| 0 | `phases/phase-0-spikes.md` | **Done 2026-11-09, two gaps (TensorRT build, real Pi).** Verdict: `docs/phase-0-verdict.md`; decisions: `docs/adr/`; state: `STATE.md` |
+| 1 | `phases/phase-1-scaffold.md` | **Done 2026-11-09.** App opens with navigation, themes, health check, empty states |
+| 2 | `phases/phase-2-models-conversion.md` | **Done 2026-11-10.** Upload `yolo11n.pt`, watch the conversion grid fill in, download any variant. Needs the converter environment (`converter/README.md`); see `STATE.md` |
+| 3 | `phases/phase-3-datasets-first-run.md` | **Done 2026-11-10 (INT8 and the calibration-set use are Phase 4).** Versioned datasets from loose photos, folders or zips; the PC agent; named experiments that compare many variants with mAP and latency; priorities in Settings; see `agent/README.md` and `STATE.md`. Owner's review of the same day is in `STATE.md`; the charts brief is `docs/brief-charts-and-families.md` |
 | 4 | `phases/phase-4-telemetry-sweeps-int8.md` | Sweeps, repeats, confidence intervals, drift flag, working INT8 |
 | 5 | `phases/phase-5-pi-agent.md` | The same experiment runs on the Pi with throttle tracking |
 | 6 | `phases/phase-6-results-explorer.md` | Pareto, box plots, heatmaps, compare 4 runs, failure browser |
@@ -95,6 +95,50 @@ on each agent by hash.
 
 Never start a phase until the previous one's acceptance block passes and a short "State / Not checked" note is added to
 `STATE.md` (create it in Phase 1).
+
+## Run it (state after Phase 3)
+
+Windows PowerShell shown; on Linux use `.venv/bin/python`.
+
+```powershell
+# first time
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r server\requirements-dev.txt
+.venv\Scripts\python -m pip install -e server --no-deps
+cd web; npm ci; cd ..
+
+# develop: two terminals
+.venv\Scripts\python -m edgebench          # API on http://127.0.0.1:8000
+cd web; npm run dev                        # UI on http://127.0.0.1:5173 (proxies /api and /ws to the API)
+
+# one process serving the built UI
+cd web; npm run build; cd ..
+$env:EDGEBENCH_WEB_DIST = "web\dist"; .venv\Scripts\python -m edgebench     # http://127.0.0.1:8000
+
+# Docker (Docker Desktop must be running); the image has no converter and no agent
+docker compose up --build                  # http://localhost:8080
+
+# the easy way on this PC: the built UI, the converter if one is set up, data kept in .\data
+.\scripts\start-server.ps1                 # http://127.0.0.1:8000
+# the benchmark agent (Devices page -> "Get a connection command" gives the token the first time)
+.\scripts\start-agent.ps1 -Token <token>   # afterwards just .\scripts\start-agent.ps1
+```
+
+Checks, all of which must pass before a phase is called done:
+
+```powershell
+cd server; ..\.venv\Scripts\python -m pytest -q; ..\.venv\Scripts\python -m ruff check .; ..\.venv\Scripts\python -m ruff format --check .; ..\.venv\Scripts\python -m mypy .
+cd web; npm run typecheck; npm run lint; npm run format; npm run build
+cd web; npx playwright test                              # against the built app (needs Chrome)
+cd web; $env:E2E_DEV = "1"; npx playwright test websocket smoke runs   # against the Vite dev server, React StrictMode
+# the agent: its own environment, see agent\README.md
+cd agent; ..\.venv-agent\Scripts\python -m pytest tests -q; ..\.venv\Scripts\python -m ruff check .
+```
+
+## The code graph
+
+`graphify-out/` holds a graph of the code for quick, cheap questions (`graphify query "..."`, `graphify explain "..."`, `graphify path "A" "B"`);
+see "Code graph" in `CLAUDE.md`. Rebuild after changes with `graphify update .`.
 
 ## Skills: which to use and when
 
