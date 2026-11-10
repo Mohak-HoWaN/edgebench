@@ -41,3 +41,10 @@ Models, conversion, datasets, agents, charts. No placeholder pages that pretend 
 
 ## Risks
 Node 26 package compatibility (found in Phase 0). Docker volume paths on Windows for `data/`: use a bind mount under the repo.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`, `docs/adr/`)
+- Pin `typescript@~6.0` (typescript-eslint does not support 7); add ESLint explicitly (create-vite 9 ships oxlint); keep `shadcn` in
+  `devDependencies` so `npm audit --omit=dev` stays clean; Playwright can use the installed Chrome/Edge (`channel: 'chrome'`), no browser download.
+- Use a pip constraints file that pins torch/torchvision (CUDA build) and both OpenCV packages; never put `opencv-python` in the API image.
+- The queue is the SQLite table in ADR 0001. Do not add Redis.
+

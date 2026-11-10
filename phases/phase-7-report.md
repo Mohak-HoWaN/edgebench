@@ -45,3 +45,9 @@ one-command reproduce script.
 ## Risks
 Tectonic downloads LaTeX packages on first compile (needs internet once); vendor a package bundle if the machine will be offline.
 Auto-generated prose must never state a claim the data does not support: every generated sentence is tied to a number and a test.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`)
+- Tectonic 0.17.0 compiled all seven template classes (IEEEtran conference/journal, acmart sigconf, llncs, elsarticle, article, report) from a
+  minimal document. First compile downloads packages (ACM took 140 s); vendor a bundle if the machine will be offline.
+  Layout and page counts were not inspected yet; the acceptance test must.
+

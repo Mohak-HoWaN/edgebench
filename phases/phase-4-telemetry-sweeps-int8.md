@@ -35,3 +35,16 @@ checks every variant for accuracy drift against the `.pt` baseline. INT8 works w
 ## Risks
 Laptop CPUs boost and throttle unpredictably, so PC latencies are noisy; the report must say so. Windows timer resolution and power
 plan affect results; record the power plan in the environment manifest.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`)
+- Statistics method: ADR 0004.
+- Thread sweep: 1, 2, 4, 8 and the physical-core count. On the dev PC (hybrid i7-13700HX) 8 threads gave no gain or a loss over 4 for several
+  variants, so "max" is not a sensible default; record the core layout in the manifest.
+- INT8: OpenVINO via NNCF (about 2x faster, drift agreement 0.913 with 128 images). ONNX INT8 only as static QDQ **with the detect head
+  excluded** (`/model.23/*`, 84 nodes; default QDQ returned zero detections). The drift gate must fail the zero-detection model; add that as a test.
+- Regression targets: calibration on one repeated image gives lower agreement than on 128 real images (0.812 vs 0.913, COCO); the JonaRu
+  "0.22 score difference" figure still needs the JonaRu model and its 9 sample frames.
+- PC telemetry without admin rights: Windows performance counters (`% Processor Performance`, `Processor Frequency`, `Thermal Zone Information`);
+  `psutil` temperature does not exist on Windows and its clock is constant. NVML for the GPU. Sampler is a separate process (about 1% of one core at 5 Hz).
+  Label the thermal zone as an ACPI zone. Record the Windows power plan.
+

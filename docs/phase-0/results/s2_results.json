@@ -1,0 +1,398 @@
+{
+  "onnx_fp32": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 64.56,
+        "p50_ms": 63.09,
+        "p95_ms": 73.47,
+        "std_ms": 4.46
+      },
+      "threads_4": {
+        "mean_ms": 20.78,
+        "p50_ms": 20.71,
+        "p95_ms": 21.73,
+        "std_ms": 0.51
+      },
+      "threads_8": {
+        "mean_ms": 17.59,
+        "p50_ms": 17.43,
+        "p95_ms": 20.11,
+        "std_ms": 1.2
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0,
+      "max_raw_class_score_diff": 0.0
+    }
+  },
+  "onnx_fp16": {
+    "latency": {},
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from D:\\copy_users\\Documents\\College\\Projects\\SSIP\\JonaRu\\Development\\project-edgebench\\spikes\\models\\yolo11n_fp16.onnx failed:Type Error: Type (tensor(float)) of output arg (/model.11/Resize_output_0) of node (/model.11/Resize_output_cast0) does not match ",
+    "trace_tail": [
+      "    sess = C.InferenceSession(session_options, self._model_path, True, self._read_config_from_model)",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from D:\\copy_users\\Documents\\College\\Projects\\SSIP\\JonaRu\\Development\\project-edgebench\\spikes\\models\\yolo11n_fp16.onnx failed:Type Error: Type (tensor(float)) of output arg (/model.11/Resize_output_0) of node (/model.11/Resize_output_cast0) does not match expected type (tensor(float16))."
+    ]
+  },
+  "onnx_int8_dynamic": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 806.88,
+        "p50_ms": 800.18,
+        "p95_ms": 857.79,
+        "std_ms": 28.48
+      },
+      "threads_4": {
+        "mean_ms": 244.7,
+        "p50_ms": 241.31,
+        "p95_ms": 263.32,
+        "std_ms": 10.46
+      },
+      "threads_8": {
+        "mean_ms": 173.02,
+        "p50_ms": 171.55,
+        "p95_ms": 183.51,
+        "std_ms": 6.66
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 59,
+      "matched": 56,
+      "agreement": 0.812,
+      "mean_score_diff": 0.0888,
+      "max_raw_class_score_diff": 0.8174
+    }
+  },
+  "onnx_int8_static_qdq": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 32.12,
+        "p50_ms": 31.36,
+        "p95_ms": 35.02,
+        "std_ms": 4.0
+      },
+      "threads_4": {
+        "mean_ms": 13.74,
+        "p50_ms": 13.56,
+        "p95_ms": 14.88,
+        "std_ms": 0.72
+      },
+      "threads_8": {
+        "mean_ms": 12.47,
+        "p50_ms": 12.43,
+        "p95_ms": 14.69,
+        "std_ms": 1.34
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 0,
+      "matched": 0,
+      "agreement": 0.0,
+      "mean_score_diff": 0.0,
+      "max_raw_class_score_diff": 0.9524
+    }
+  },
+  "ov_fp32": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 65.12,
+        "p50_ms": 64.24,
+        "p95_ms": 70.75,
+        "std_ms": 2.59
+      },
+      "threads_4": {
+        "mean_ms": 20.57,
+        "p50_ms": 20.2,
+        "p95_ms": 22.91,
+        "std_ms": 1.17
+      },
+      "threads_8": {
+        "mean_ms": 14.62,
+        "p50_ms": 14.47,
+        "p95_ms": 15.68,
+        "std_ms": 0.67
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0,
+      "max_raw_class_score_diff": 0.0
+    }
+  },
+  "ov_fp16": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 64.31,
+        "p50_ms": 63.6,
+        "p95_ms": 67.33,
+        "std_ms": 2.48
+      },
+      "threads_4": {
+        "mean_ms": 20.14,
+        "p50_ms": 20.06,
+        "p95_ms": 20.89,
+        "std_ms": 0.52
+      },
+      "threads_8": {
+        "mean_ms": 20.31,
+        "p50_ms": 20.72,
+        "p95_ms": 21.42,
+        "std_ms": 1.5
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0006,
+      "max_raw_class_score_diff": 0.0558
+    }
+  },
+  "ov_int8_calib128": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 30.5,
+        "p50_ms": 29.94,
+        "p95_ms": 34.31,
+        "std_ms": 1.71
+      },
+      "threads_4": {
+        "mean_ms": 10.49,
+        "p50_ms": 10.41,
+        "p95_ms": 11.13,
+        "std_ms": 0.35
+      },
+      "threads_8": {
+        "mean_ms": 10.77,
+        "p50_ms": 10.62,
+        "p95_ms": 13.35,
+        "std_ms": 1.34
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 66,
+      "matched": 63,
+      "agreement": 0.913,
+      "mean_score_diff": 0.0467,
+      "max_raw_class_score_diff": 0.7855
+    }
+  },
+  "ov_int8_calib1x10": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 29.85,
+        "p50_ms": 29.33,
+        "p95_ms": 31.89,
+        "std_ms": 1.85
+      },
+      "threads_4": {
+        "mean_ms": 10.31,
+        "p50_ms": 10.21,
+        "p95_ms": 11.1,
+        "std_ms": 0.46
+      },
+      "threads_8": {
+        "mean_ms": 10.04,
+        "p50_ms": 10.23,
+        "p95_ms": 10.78,
+        "std_ms": 0.81
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 58,
+      "matched": 56,
+      "agreement": 0.812,
+      "mean_score_diff": 0.1049,
+      "max_raw_class_score_diff": 0.71
+    }
+  },
+  "ncnn_fp32": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 86.56,
+        "p50_ms": 81.97,
+        "p95_ms": 118.61,
+        "std_ms": 15.9
+      },
+      "threads_4": {
+        "mean_ms": 36.33,
+        "p50_ms": 35.57,
+        "p95_ms": 42.45,
+        "std_ms": 3.12
+      },
+      "threads_8": {
+        "mean_ms": 39.94,
+        "p50_ms": 39.78,
+        "p95_ms": 47.03,
+        "std_ms": 4.33
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0,
+      "max_raw_class_score_diff": 0.0
+    }
+  },
+  "ncnn_fp16": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 79.86,
+        "p50_ms": 79.56,
+        "p95_ms": 86.29,
+        "std_ms": 3.92
+      },
+      "threads_4": {
+        "mean_ms": 34.74,
+        "p50_ms": 34.31,
+        "p95_ms": 40.27,
+        "std_ms": 1.96
+      },
+      "threads_8": {
+        "mean_ms": 38.44,
+        "p50_ms": 37.75,
+        "p95_ms": 44.91,
+        "std_ms": 3.49
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0005,
+      "max_raw_class_score_diff": 0.0246
+    }
+  },
+  "torchscript_cpu": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 79.35,
+        "p50_ms": 78.94,
+        "p95_ms": 82.75,
+        "std_ms": 2.42
+      },
+      "threads_4": {
+        "mean_ms": 39.81,
+        "p50_ms": 38.78,
+        "p95_ms": 43.65,
+        "std_ms": 4.56
+      },
+      "threads_8": {
+        "mean_ms": 35.64,
+        "p50_ms": 33.88,
+        "p95_ms": 45.31,
+        "std_ms": 3.98
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0,
+      "max_raw_class_score_diff": 0.0
+    }
+  },
+  "torchscript_cuda": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 5.35,
+        "p50_ms": 4.7,
+        "p95_ms": 9.1,
+        "std_ms": 1.58
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0004,
+      "max_raw_class_score_diff": 0.0163
+    }
+  },
+  "onnx_fp16_blockresize": {
+    "latency": {},
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from D:\\copy_users\\Documents\\College\\Projects\\SSIP\\JonaRu\\Development\\project-edgebench\\spikes\\models\\yolo11n_fp16_blockresize.onnx failed:Type Error: Type (tensor(float)) of output arg (/model.11/Resize_output_0) of node (/model.11/Resize_output_cast0) doe",
+    "trace_tail": [
+      "    sess = C.InferenceSession(session_options, self._model_path, True, self._read_config_from_model)",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from D:\\copy_users\\Documents\\College\\Projects\\SSIP\\JonaRu\\Development\\project-edgebench\\spikes\\models\\yolo11n_fp16_blockresize.onnx failed:Type Error: Type (tensor(float)) of output arg (/model.11/Resize_output_0) of node (/model.11/Resize_output_cast0) does not match expected type (tensor(float16))."
+    ]
+  },
+  "onnx_fp16_ortconv": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 62.51,
+        "p50_ms": 61.19,
+        "p95_ms": 65.64,
+        "std_ms": 8.22
+      },
+      "threads_4": {
+        "mean_ms": 18.76,
+        "p50_ms": 18.61,
+        "p95_ms": 19.84,
+        "std_ms": 0.61
+      },
+      "threads_8": {
+        "mean_ms": 15.66,
+        "p50_ms": 15.62,
+        "p95_ms": 18.21,
+        "std_ms": 1.53
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 69,
+      "matched": 69,
+      "agreement": 1.0,
+      "mean_score_diff": 0.0007,
+      "max_raw_class_score_diff": 0.0667
+    }
+  },
+  "onnx_int8_static_nohead": {
+    "latency": {
+      "threads_1": {
+        "mean_ms": 42.91,
+        "p50_ms": 42.56,
+        "p95_ms": 45.68,
+        "std_ms": 1.56
+      },
+      "threads_4": {
+        "mean_ms": 16.91,
+        "p50_ms": 16.78,
+        "p95_ms": 18.13,
+        "std_ms": 0.57
+      },
+      "threads_8": {
+        "mean_ms": 15.39,
+        "p50_ms": 14.82,
+        "p95_ms": 18.11,
+        "std_ms": 1.53
+      }
+    },
+    "drift": {
+      "ref_boxes": 69,
+      "variant_boxes": 63,
+      "matched": 56,
+      "agreement": 0.812,
+      "mean_score_diff": 0.0964,
+      "max_raw_class_score_diff": 0.8402
+    }
+  }
+}

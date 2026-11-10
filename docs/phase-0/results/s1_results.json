@@ -1,0 +1,86 @@
+{
+  "onnx_fp32": {
+    "ok": true,
+    "seconds": 5.1,
+    "size_mb": 10.74,
+    "path": "models\\yolo11n_fp32.onnx"
+  },
+  "torchscript": {
+    "ok": true,
+    "seconds": 1.5,
+    "size_mb": 11.01,
+    "path": "models\\yolo11n.torchscript"
+  },
+  "onnx_fp16": {
+    "ok": true,
+    "seconds": 0.1,
+    "size_mb": 5.43,
+    "path": "models\\yolo11n_fp16.onnx"
+  },
+  "ov_fp32": {
+    "ok": true,
+    "seconds": 0.3,
+    "size_mb": 0.31,
+    "path": "models\\yolo11n_ov_fp32.xml"
+  },
+  "ov_fp16": {
+    "ok": true,
+    "seconds": 0.1,
+    "size_mb": 0.41,
+    "path": "models\\yolo11n_ov_fp16.xml"
+  },
+  "ov_int8_calib128": {
+    "ok": true,
+    "seconds": 12.7,
+    "size_mb": 0.65,
+    "path": "models\\yolo11n_ov_int8_calib128.xml"
+  },
+  "ov_int8_calib1x10": {
+    "ok": true,
+    "seconds": 4.5,
+    "size_mb": 0.65,
+    "path": "models\\yolo11n_ov_int8_calib1x10.xml"
+  },
+  "onnx_int8_dynamic": {
+    "ok": true,
+    "seconds": 1.5,
+    "size_mb": 3.05,
+    "path": "models\\yolo11n_int8_dynamic.onnx"
+  },
+  "onnx_int8_static_qdq": {
+    "ok": true,
+    "seconds": 10.2,
+    "size_mb": 3.13,
+    "path": "models\\yolo11n_int8_static_qdq.onnx"
+  },
+  "ncnn_fp32": {
+    "ok": true,
+    "seconds": 5.0,
+    "size_mb": 10.66,
+    "path": "models\\yolo11n_ncnn_fp32"
+  },
+  "ncnn_fp16": {
+    "ok": true,
+    "seconds": 3.9,
+    "size_mb": 5.44,
+    "path": "models\\yolo11n_ncnn_fp16"
+  },
+  "onnx_fp16_blockresize": {
+    "ok": true,
+    "seconds": 0.3,
+    "size_mb": 5.43,
+    "path": "models\\yolo11n_fp16_blockresize.onnx"
+  },
+  "onnx_fp16_ortconv": {
+    "ok": true,
+    "seconds": 0.1,
+    "size_mb": 5.43,
+    "path": "models\\yolo11n_fp16_ortconv.onnx"
+  },
+  "onnx_int8_static_nohead": {
+    "ok": true,
+    "seconds": 12.4,
+    "size_mb": 4.51,
+    "path": "models\\yolo11n_int8_static_nohead.onnx"
+  }
+}

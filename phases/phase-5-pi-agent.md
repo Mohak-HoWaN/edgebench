@@ -48,3 +48,12 @@ side.
 
 ## Risks
 Wheel availability for ARM64 (from Phase 0). Pi 5 under-voltage from a weak supply invalidates results; the throttle bits show it.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`)
+- Pi requirements, from the package index (not tested on a Pi): 64-bit OS, glibc 2.35 or newer (OpenVINO), Python 3.11 or newer
+  (ONNX Runtime 1.25). The "This device" panel must say "install 64-bit Raspberry Pi OS" when the browser reports `armv8l`.
+- Pin per Python version; the newest numpy/scipy lack Python 3.11 ARM wheels. Repo pins that do have aarch64 wheels: numpy 2.2.6, scipy 1.16.3,
+  onnxruntime 1.25.1, openvino 2026.1.0, ncnn 1.0.20261020, pnnx 20261020, opencv-python-headless 4.12.0.88, psutil 7.2.2.
+- Measure, do not assume: ncnn is slower than ORT/OpenVINO on x86 here but is designed for ARM; ONNX INT8 behaviour on ARM is unknown.
+- Protocol and security: ADR 0003. Network modes (same network, or Tailscale) are still untested.
+

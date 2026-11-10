@@ -30,3 +30,6 @@ open a socket is stopped and reported without taking the agent down. Full test s
 
 ## Risks
 Plugin sandboxing on Windows is limited; do not describe it as secure isolation. Keep example plugins tiny.
+
+## Owner request, 2026-11-10: more model families and dataset formats
+See `docs/brief-charts-and-families.md`, sections 2 to 4: segment/pose/classify, an ONNX file uploaded directly, more annotation formats (LabelMe, CVAT, classification folders, CSV, video frames) and the engineer controls (Advanced section of the experiment form).

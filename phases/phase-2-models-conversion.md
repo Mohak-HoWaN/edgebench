@@ -38,3 +38,13 @@ the source) and `project/pipeline/jonaru/detector.py` (`letterbox`, `decode`) fo
 ## Risks
 FP16 on CPU runtimes can be slower than FP32; that is a result, not a bug (Phase 4 shows it). ncnn and pnnx tooling may need network
 access on first use.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`)
+- Matrix for this phase: TorchScript; ONNX FP32; ONNX FP16 **using `onnxruntime.transformers.float16.convert_float_to_float16`** (the
+  `onnxconverter-common` result does not load); OpenVINO FP32 and FP16; ncnn FP32 and FP16 (needs `ncnn` and `pnnx` packages).
+  Do not build ONNX INT8 dynamic or TFLite.
+- Every conversion runs in a subprocess with `YOLO_AUTOINSTALL=False`. Ultralytics otherwise installs packages mid-export (it replaced the
+  CPU `onnxruntime` with `onnxruntime-gpu` during the spike). A missing package is a failed cell with a clear message.
+- OpenVINO and ncnn artifacts are bundles (`.xml`+`.bin`, `.param`+`.bin`): show the combined size (xml alone misleads: 0.3 MB vs 10.9 MB).
+- Cache key and storage: ADR 0002.
+

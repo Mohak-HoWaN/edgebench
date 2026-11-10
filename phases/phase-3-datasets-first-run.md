@@ -45,3 +45,12 @@ Sweeps, repeats, confidence intervals, drift against baseline, telemetry, INT8 (
 ## Risks
 Dataset not on disk (README open question 3). Large dataset transfer is a no-op on the PC (same disk); keep the cache path anyway
 because Phase 5 relies on it.
+
+## From Phase 0 (binding; see `docs/phase-0-verdict.md`)
+- Each runtime benchmark runs in **its own subprocess**: ncnn crashed the process natively (access violation, no traceback) when an
+  `ncnn.Mat` was built from a temporary array. Hold the source array in a variable until after `clone()`. A crash must mark one run failed,
+  not take the agent down.
+- Seed dataset for tests and the quickstart: COCO128 (public) with `yolo11n.pt`; it gives labels, so the mAP cross-check against Ultralytics
+  `val()` can run before the owner's own dataset exists.
+- Agent protocol: ADR 0003. Device type comes from the agent fingerprint, not the browser.
+

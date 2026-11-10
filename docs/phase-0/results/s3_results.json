@@ -1,0 +1,77 @@
+{
+  "cpu_temperature_psutil": {
+    "psutil_sensors_temperatures_exists": false,
+    "value": null
+  },
+  "cpu_temperature_wmi_acpi": {
+    "celsius": [],
+    "stderr": "Get-CimInstance : Access denied \nAt line:1 char:1\n+ Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemp ...\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  "
+  },
+  "cpu_clock_and_per_core": {
+    "idle_mhz": 2100.0,
+    "max_mhz_reported": 2100.0,
+    "under_load_mhz": [
+      2100.0,
+      2100.0,
+      2100.0,
+      1453.0,
+      2100.0
+    ],
+    "per_core_percent_under_load": [
+      29.2,
+      0.0,
+      40.8,
+      0.0,
+      4.5,
+      0.0,
+      21.7,
+      16.9,
+      43.3,
+      0.0,
+      60.3,
+      0.0,
+      16.7,
+      0.0,
+      6.1,
+      0.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0
+    ],
+    "logical": 24,
+    "physical": 16
+  },
+  "gpu_nvml": {
+    "name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "temp_c": 54,
+    "util_gpu_pct": 29,
+    "util_mem_pct": 18,
+    "mem_used_mb": 638,
+    "mem_total_mb": 6141,
+    "clock_sm_mhz": 540,
+    "clock_sm_max_mhz": 3105,
+    "throttle_reason_bitmask": 1
+  },
+  "power_plan": {
+    "active_scheme": "Power Scheme GUID: 8d453b85-5b92-4113-98f4-479e17a53e2e  (Acer)"
+  },
+  "timers": {
+    "timer_resolution_ms_current": 1.0,
+    "timer_resolution_ms_best": 0.5,
+    "perf_counter_resolution_ns": 1e-07,
+    "perf_counter_monotonic": true
+  },
+  "sampler_5hz_separate_process": {
+    "samples": 50,
+    "own_cpu_seconds": 0.109,
+    "gap_ms_mean": 200.0,
+    "gap_ms_max": 212.4,
+    "separate_pid": true,
+    "cpu_pct_of_one_core": 1.09
+  }
+}

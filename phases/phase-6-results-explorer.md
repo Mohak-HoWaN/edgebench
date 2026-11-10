@@ -36,3 +36,6 @@ figures. Colour must not be the only cue (marker shape or label too). Reuse the 
 
 ## Risks
 Overplotting with large sweeps: aggregate by configuration first, drill down second.
+
+## Owner request, 2026-11-10: charts with interpretations
+The full catalogue (17 charts, how to read each, the red flags the page must call out, the data each needs) is in `docs/brief-charts-and-families.md`, section 1. Build order and the interpretation-rule approach are there too. The experiment page already ranks runs by the owner's priority metrics (Settings) and marks the best in each column; the charts build on that.
