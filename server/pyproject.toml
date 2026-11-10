@@ -1,0 +1,43 @@
+[project]
+name = "edgebench-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+# Exact versions live in requirements.txt (runtime) and requirements-dev.txt (runtime + tools).
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "sqlmodel",
+    "alembic",
+    "pillow",
+]
+
+[tool.setuptools.packages.find]
+include = ["edgebench*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["edgebench/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF"]
+ignore = ["PLR2004", "PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR0915"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+exclude = ["edgebench/migrations/versions"]
+
+[[tool.mypy.overrides]]
+module = ["alembic.*", "yaml"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]

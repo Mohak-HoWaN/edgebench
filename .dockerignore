@@ -1,0 +1,14 @@
+.git
+.venv
+spikes
+data
+docs
+phases
+**/node_modules
+**/__pycache__
+web/dist
+web/test-results
+web/playwright-report
+server/tests
+**/.env
+**/.env.*

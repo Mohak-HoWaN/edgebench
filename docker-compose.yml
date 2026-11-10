@@ -1,0 +1,14 @@
+# Only the server runs here. Benchmarks must run in an agent on the real machine, never in Docker: on Windows Docker Desktop
+# runs containers in a virtual machine, which distorts latency and hides CPU affinity and temperatures (README, rule 3).
+services:
+  server:
+    build: .
+    # Published on this computer only. Exposing it on the network needs device tokens first (ADR 0003, Phase 5).
+    ports:
+      - "127.0.0.1:8080:8000"
+    volumes:
+      - edgebench-data:/data
+    restart: unless-stopped
+
+volumes:
+  edgebench-data:

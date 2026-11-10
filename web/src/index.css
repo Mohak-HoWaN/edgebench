@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/*
+ * Colour tokens, defined once. Light and dark values are checked against WCAG AA by e2e/contrast.spec.ts.
+ * Phase 6 adds chart series colours here (device identity: one hue per device kind).
+ */
+:root {
+  --background: #f5f6f8;
+  --foreground: #14181f;
+  --card: #ffffff;
+  --card-foreground: #14181f;
+  --popover: #ffffff;
+  --popover-foreground: #14181f;
+  --primary: #0b6e78;
+  --primary-foreground: #ffffff;
+  --secondary: #e7eaef;
+  --secondary-foreground: #14181f;
+  --muted: #e7eaef;
+  --muted-foreground: #566070;
+  --accent: #e0e5eb;
+  --accent-foreground: #14181f;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #d5dae1;
+  --input: #7b8595;
+  --ring: #0b6e78;
+  --ok: #17703a;
+  --warn: #9a5b00;
+  --radius: 0.5rem;
+  --sidebar: #eceff3;
+  --sidebar-foreground: #14181f;
+  --sidebar-primary: #0b6e78;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dce1e8;
+  --sidebar-accent-foreground: #14181f;
+  --sidebar-border: #d5dae1;
+  --sidebar-ring: #0b6e78;
+}
+
+.dark {
+  --background: #141a22;
+  --foreground: #e6e9ee;
+  --card: #1b222c;
+  --card-foreground: #e6e9ee;
+  --popover: #1b222c;
+  --popover-foreground: #e6e9ee;
+  --primary: #4cc2cb;
+  --primary-foreground: #062a2e;
+  --secondary: #232c38;
+  --secondary-foreground: #e6e9ee;
+  --muted: #232c38;
+  --muted-foreground: #9ca6b5;
+  --accent: #2a3442;
+  --accent-foreground: #e6e9ee;
+  --destructive: #f97066;
+  --destructive-foreground: #2a0a07;
+  --border: #2d3746;
+  --input: #6b7788;
+  --ring: #4cc2cb;
+  --ok: #5fd08a;
+  --warn: #f0b252;
+  --sidebar: #10151c;
+  --sidebar-foreground: #e6e9ee;
+  --sidebar-primary: #4cc2cb;
+  --sidebar-primary-foreground: #062a2e;
+  --sidebar-accent: #222b37;
+  --sidebar-accent-foreground: #e6e9ee;
+  --sidebar-border: #2d3746;
+  --sidebar-ring: #4cc2cb;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
