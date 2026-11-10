@@ -1,0 +1,38 @@
+[project]
+name = "edgebench-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Runs EdgeBench benchmarks on the machine it is installed on (a PC or a Raspberry Pi) and reports to the server."
+# The runtimes (onnxruntime, openvino, ncnn, torch, ultralytics) are optional: a run whose runtime is missing is reported as
+# "not available". See README.md for the pinned versions used on the development PC.
+dependencies = [
+    "numpy",
+    "pillow",
+    "httpx",
+    "psutil",
+]
+
+[project.optional-dependencies]
+opencv = ["opencv-python-headless"]
+
+[project.scripts]
+edgebench-agent = "edgebench_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["edgebench_agent*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF"]
+ignore = ["PLR2004", "PLR0913", "PLR0912", "PLR0915", "PLR0917", "PLC0415"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
