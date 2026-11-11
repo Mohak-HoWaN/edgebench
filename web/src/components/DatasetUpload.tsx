@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FolderUp, ImagePlus, X } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Field } from "@/components/Field";
+import { Field, NativeSelect } from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -196,10 +196,9 @@ function ClassNameChoice({ named, modelId, setModelId }: ReturnType<typeof useCl
       help="Only used when the files have no data.yaml or class list. The labels' class numbers must follow that model's order."
     >
       {(id, describedBy) => (
-        <select
+        <NativeSelect
           id={id}
           aria-describedby={describedBy}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm dark:bg-input/30"
           value={modelId ?? ""}
           onChange={(e) => {
             setModelId(e.target.value ? Number(e.target.value) : null);
@@ -211,7 +210,7 @@ function ClassNameChoice({ named, modelId, setModelId }: ReturnType<typeof useCl
               {m.name}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       )}
     </Field>
   );

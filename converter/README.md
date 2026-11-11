@@ -46,3 +46,9 @@ Without it the server still runs; uploaded models are kept, and the Models page 
 .venv-converter\Scripts\python converter\convert.py --op onnx_fp32 --pt model.pt --out out1 --imgsz 640
 .venv-converter\Scripts\python converter\convert.py --op openvino_fp16 --pt model.pt --source out1\model.onnx --out out2
 ```
+
+## INT8 (Phase 4)
+`--op openvino_int8` (NNCF) and `--op onnx_int8` (ONNX Runtime static QDQ, the detect head, found as the highest `/model.N/` prefix, kept in
+float: the default left a model that returns no detections) need `--source` (the ONNX FP32 file) and `--calibration FOLDER` with at least 50
+**different** readable pictures (copies are counted once; one picture repeated gave a worse model than 128 real ones). The result's check is shape
+and finiteness only: whether it is still good is decided by the accuracy check of an experiment with the `.pt` baseline.

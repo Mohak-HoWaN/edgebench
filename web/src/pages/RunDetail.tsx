@@ -19,6 +19,7 @@ import {
   useRunAgain,
   type Accuracy,
   type RunInfo,
+  type RunResult,
   type Stage,
 } from "@/lib/runs";
 
@@ -106,12 +107,176 @@ function AccuracyBlock({ a, run }: { a: Accuracy; run: RunInfo }) {
   );
 }
 
+const NOT_AVAILABLE = "not available on this machine";
+const num = (n: number | null | undefined, unit: string, digits = 0) =>
+  n === null || n === undefined ? NOT_AVAILABLE : `${n.toFixed(digits)}${unit}`;
+
+/** The repeats of a run: each one's median, whether it counts, and what the machine did during it. */
+function Repeats({ r }: { r: RunInfo }) {
+  const speed = r.result?.speed;
+  const repeats = speed?.repeats;
+  const l = r.latency;
+  if (!repeats?.length || !l) return null;
+  return (
+    <div className="mb-6 max-w-3xl">
+      <p className="text-sm" data-testid="headline-latency">
+        <span className="text-2xl font-semibold tabular-nums">{l.p50_ms.toFixed(1)} ms</span>
+        {l.ci_half_width_ms !== null ? (
+          <span className="tabular-nums"> ± {l.ci_half_width_ms.toFixed(1)} ms</span>
+        ) : null}{" "}
+        <span className="text-muted-foreground">
+          median time per image, the mean of {String(l.n)} repeat{l.n === 1 ? "" : "s"}
+          {l.ci_half_width_ms !== null ? " with a 95% interval across them" : ""}
+        </span>
+      </p>
+      {l.wide ? (
+        <p className="mt-1 text-sm text-warn">
+          {l.n < 2
+            ? "One repeat gives no interval, so this number has no error bar. Use more repeats."
+            : `${String(l.n)} repeats give a wide interval. Five or more narrow it.`}
+        </p>
+      ) : null}
+      {!l.valid ? (
+        <p role="alert" className="mt-1 border-l-2 border-warn pl-3 text-sm">
+          Invalid for latency: the machine slowed down during every repeat, so this speed is not to
+          be compared. Run it again once the machine has cooled.
+        </p>
+      ) : null}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[34rem] text-left text-sm">
+          <caption className="sr-only">Each repeat of the timed rounds</caption>
+          <thead>
+            <tr className="border-b">
+              <th scope="col" className="py-2 pr-3 font-medium">
+                Repeat
+              </th>
+              <th scope="col" className="py-2 pr-3 text-right font-medium">
+                Median
+              </th>
+              <th scope="col" className="py-2 pr-3 text-right font-medium">
+                95th percentile
+              </th>
+              <th scope="col" className="py-2 pr-3 text-right font-medium">
+                CPU
+              </th>
+              <th scope="col" className="py-2 pr-3 text-right font-medium">
+                Clock
+              </th>
+              <th scope="col" className="py-2 pr-3 text-right font-medium">
+                Temperature
+              </th>
+              <th scope="col" className="py-2 font-medium">
+                Counts?
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {repeats.map((rep) => (
+              <tr key={rep.index} className="border-b align-top tabular-nums">
+                <th scope="row" className="py-2 pr-3 text-left font-normal">
+                  {rep.index + 1}
+                </th>
+                <td className="py-2 pr-3 text-right">{ms(rep.stats.p50)}</td>
+                <td className="py-2 pr-3 text-right">{ms(rep.stats.p95)}</td>
+                <td className="py-2 pr-3 text-right">{num(rep.telemetry?.cpu_mean, "%")}</td>
+                <td className="py-2 pr-3 text-right">
+                  {num(rep.telemetry?.clock_mhz_mean, " MHz")}
+                </td>
+                <td className="py-2 pr-3 text-right">{num(rep.telemetry?.temp_c_max, " °C")}</td>
+                <td className="py-2 text-xs">
+                  {rep.valid ? "Yes" : `No: ${rep.invalid_reason ?? "throttled"}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** What the machine did while the run went, from the sampler that ran beside it. Anything it could not read says so. */
+function Machine({ res }: { res: RunResult }) {
+  const t = res.telemetry;
+  const env = res.environment;
+  if (!t && !env) return null;
+  const run = t?.run;
+  const sources = t?.sources ?? {};
+  const rows: [string, string, string | null | undefined][] = [
+    [
+      "CPU use",
+      `${num(run?.cpu_mean, "%")} on average, ${num(run?.cpu_max, "%")} at most`,
+      sources.cpu,
+    ],
+    ["Memory", `${num(run?.rss_peak_mb, " MB")} at the peak (the benchmark process)`, sources.ram],
+    [
+      "CPU clock",
+      `${num(run?.clock_mhz_mean, " MHz")} on average; the run started at ${num(t?.start_clock_mhz, " MHz")}`,
+      sources.clock,
+    ],
+    ["Temperature", `${num(run?.temp_c_max, " °C")} at the highest`, sources.temperature],
+    [
+      "Throttling",
+      run?.throttled === null || run?.throttled === undefined
+        ? "no throttle flag on this machine; a clock that drops more than 10% still marks a repeat invalid"
+        : run.throttled
+          ? "the machine reported throttling"
+          : "none reported",
+      sources.throttle,
+    ],
+    [
+      "GPU",
+      run?.gpu_util_mean == null ? NOT_AVAILABLE : `${run.gpu_util_mean.toFixed(0)}% busy`,
+      sources.gpu,
+    ],
+  ];
+  return (
+    <Section
+      title="Machine during the run"
+      id="machine"
+      hint="Sampled five times a second by a separate process, so reading the sensors never slows the benchmark. A reading the machine cannot give is 'not available', never a zero."
+    >
+      {t?.enabled === false ? (
+        <p className="text-sm text-muted-foreground">Telemetry was switched off for this run.</p>
+      ) : null}
+      <dl className="grid max-w-3xl grid-cols-[9rem_1fr] gap-y-2 text-sm">
+        {t?.enabled === false
+          ? null
+          : rows.map(([name, value, source]) => (
+              <div key={name} className="contents">
+                <dt className="text-muted-foreground">{name}</dt>
+                <dd>
+                  {value}
+                  {source ? (
+                    <span className="block text-xs text-muted-foreground">{source}</span>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
+        {env ? (
+          <>
+            <dt className="text-muted-foreground">Power plan</dt>
+            <dd>{env.power_plan ?? env.governor ?? NOT_AVAILABLE}</dd>
+            <dt className="text-muted-foreground">Cores</dt>
+            <dd className="tabular-nums">
+              {env.logical_cores ?? "?"} logical, {env.physical_cores ?? "?"} physical
+            </dd>
+          </>
+        ) : null}
+      </dl>
+    </Section>
+  );
+}
+
 function Outcome({ r, siblings }: { r: RunInfo; siblings: RunInfo[] }) {
   const res = r.result;
   const order = usePriority((s) => s.order);
   if (!res?.speed) return null;
+  const repeats = res.speed.repeats?.length ?? 1;
   const facts = [
-    `Measured over ${String(res.speed.iterations)} timed rounds after ${String(res.speed.warmup)} warm-up rounds, cycling ${String(res.speed.pictures_cycled)} pictures.`,
+    `Measured over ${String(res.speed.iterations)} timed rounds after ${String(res.speed.warmup)} warm-up rounds${
+      repeats > 1 ? `, repeated ${String(repeats)} times` : ""
+    }, cycling ${String(res.speed.pictures_cycled)} pictures.`,
     res.load_ms === undefined ? "" : `The model took ${ms(res.load_ms)} to load.`,
   ].filter(Boolean);
   return (
@@ -129,8 +294,9 @@ function Outcome({ r, siblings }: { r: RunInfo; siblings: RunInfo[] }) {
         </Section>
         <Section
           title="Speed per image"
-          hint="Time for one image, start to finish, split into preparing the picture, running the model and decoding the answer. The first call is slow and is left out; one run is one measurement, so repeat it before trusting small differences."
+          hint="Time for one image, start to finish, split into preparing the picture, running the model and decoding the answer. The first call is slow and is left out. The table is pooled over the repeats that counted; repeats that were throttled are listed above it and left out."
         >
+          <Repeats r={r} />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[34rem] max-w-3xl text-left text-sm">
               <caption className="sr-only">Time per image for each stage, in milliseconds</caption>
@@ -330,6 +496,7 @@ export default function RunDetail() {
       </div>
 
       <Outcome r={r} siblings={experiment.data?.runs ?? []} />
+      {r.result ? <Machine res={r.result} /> : null}
 
       <Section title="Settings and environment">
         <dl className="grid max-w-prose grid-cols-[11rem_1fr] gap-y-2 text-sm">

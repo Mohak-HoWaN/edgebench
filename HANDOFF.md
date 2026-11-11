@@ -1,4 +1,4 @@
-# HANDOFF (updated 2026-11-10, after Phase 3 and the owner's review of it)
+# HANDOFF (updated 2026-11-10, after Phase 4)
 
 For a Claude session that has none of the earlier conversation. Read this, then `STATE.md` (what is verified and what is not), then
 `CLAUDE.md` (commands, architecture, traps). Do not re-decide anything in `docs/adr/0001-0004` or `docs/phase-0-verdict.md` without new
@@ -28,17 +28,17 @@ Remote: `https://github.com/Mohak-HoWaN/edgebench.git`, branch `main`.
 | 1 scaffold, DB, queue, web shell | done |
 | 2 model upload, conversion matrix, downloads | done |
 | 3 datasets, PC agent, experiments | **done**, verified on the PC only. The owner's 8-point review (versioned datasets, folders without zip, device-limited threads and CPU pinning, experiments as rows, result priorities, history buttons, custom variants, VOC) is done; **charts, more model families and more dataset formats are only in `docs/brief-charts-and-families.md`** |
-| 4 sweeps, repeats, confidence intervals, drift, INT8, telemetry | **next** (`phases/phase-4-telemetry-sweeps-int8.md`) |
+| 4 sweeps, repeats, confidence intervals, drift, INT8, telemetry | **done**, verified on the PC only (`STATE.md` has the measurements and what was not checked) |
 | 5-9 | not started |
 
-**Nothing from Phases 0-3 is committed.** The last commit is `f7cd4f4` (plan only). Ask the owner before committing or pushing.
+Phases 0-3 are committed and pushed (`main`, last at `176512e`). **Phase 4 and the dropdown colour fix are not committed.** Ask the owner before committing or pushing.
 
 ## Run it
 ```powershell
 .\scripts\start-server.ps1            # http://127.0.0.1:8000 ; uses .venv, web\dist, data\, and the converter env it finds
 .\scripts\start-agent.ps1 -Token <token>   # token from Devices -> "Get a connection command"; afterwards without -Token
-cd server ; ..\.venv\Scripts\python -m pytest -q        # 198 tests, about 2 minutes (one uses the real converter)
-cd agent  ; ..\.venv-agent\Scripts\python -m pytest tests -q    # 40 tests
+cd server ; ..\.venv\Scripts\python -m pytest -q        # about 2.5 minutes (one uses the real converter, INT8 included)
+cd agent  ; ..\.venv-agent\Scripts\python -m pytest tests -q    # 58 tests
 cd web ; npm run typecheck ; npm run lint ; npm run build ; npx playwright test   # build first: the tests serve web/dist
 ```
 Environments (all git-ignored): `.venv` (server, Python 3.12), `.venv-agent` (agent tests: numpy, OpenCV, ONNX Runtime, httpx, plus the
@@ -78,15 +78,20 @@ formats (LabelMe, CVAT, classification folders, CSV, video frames), an Advanced 
 All in `docs/brief-charts-and-families.md` with a suggested order. Say so plainly when asked; do not call a phase done without them being
 listed as open.
 
-## Phase 4 questions to settle with the owner before building
-1. INT8: which paths (OpenVINO NNCF is the one Phase 0 found good: ~2x faster; ONNX INT8 needs the detect head excluded) and what accuracy gate
-   fails a variant?
-2. Sweeps: threads 1, 2, 4, 8 and the physical-core count were the Phase 0 plan; how many repeats and what confidence level (ADR 0004)?
-3. Telemetry on this PC without admin rights: Windows performance counters and NVML work (Phase 0 finding 9); the thermal zone is not
-   necessarily the CPU die.
-4. The calibration subset exists (seeded, min 50, mixes sources) but nothing uses it yet.
+## Phase 4: decisions I made that the owner may want to change
+1. **Accuracy-check limits** default to a mAP50 drop of 5 points and a mean box agreement of 0.80 (Settings, kept in the browser). They come from
+   one measurement (yolo11n, COCO128): OpenVINO INT8 loses about 3.5 points at 0.82 and ONNX INT8 about 6.6 at 0.74. A zero-detection model fails
+   whatever the limits. The owner knows what loss the shop can accept; ask.
+2. **Repeats:** 3 by default (ADR 0004: a wide interval; five or more are recommended in the page). Confidence level 95%. A "Quick look" preset runs
+   one repeat and says it has no error bar.
+3. **INT8 paths:** OpenVINO NNCF and ONNX static QDQ with the detect head kept in float. Neither is made by "convert everything".
+   Calibration needs 50 or more *different* pictures of a dataset version; the dataset page's own subset is used unless the form asks otherwise.
+4. **Telemetry without admin rights (Windows):** performance counters give clock and an ACPI temperature; there is no throttle flag, so a clock
+   that drops more than 10% is the signal. A Raspberry Pi has `vcgencmd get_throttled` in the code, **untested**.
+5. **Not built from the Phase 4 brief:** batch-size sweeps (every export is batch 1; the plan would have to convert dynamic-batch models),
+   TensorRT, drift per class shown in the UI (the numbers are in the API), an "invalid for latency" override, a telemetry chart over time.
 
 ## Starter prompt for the new session
-> Read `project-edgebench/HANDOFF.md`, `STATE.md` and `CLAUDE.md`. Phases 0-3 are done and uncommitted. Start the server with
-> `scripts/start-server.ps1` and the agent with `scripts/start-agent.ps1` to confirm they work, then read `phases/phase-4-*.md` and tell me
+> Read `project-edgebench/HANDOFF.md`, `STATE.md` and `CLAUDE.md`. Phases 0-4 are done; Phase 4 is uncommitted. Start the server with
+> `scripts/start-server.ps1` and the agent with `scripts/start-agent.ps1` to confirm they work, then read `phases/phase-5-*.md` and tell me
 > the plan and the open questions before writing code. Do not commit or push unless I ask. Use virtual envs only.

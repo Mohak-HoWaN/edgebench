@@ -38,3 +38,12 @@ Create `.venv-agent`: `python -m venv .venv-agent` then
 ## Tests
 `.venv-agent\Scripts\python -m pytest agent\tests` (38 tests: AP maths on hand-built detections, letterbox and NMS, the benchmark
 process with a runtime that knows the answers, and the real agent against the real server with a stand-in benchmark process).
+
+## Repeats and telemetry (Phase 4)
+A run is `repeats` timed rounds, each preceded by its own warm-up (`bench.py`). Beside the benchmark child the agent starts
+`python -m edgebench_agent.telemetry` as a separate process (5 Hz, one JSON line per sample); when the child ends, `repeats.merge_telemetry`
+attaches each repeat's window (CPU per core, RSS peak, clock, temperature, throttle flag, GPU), marks a repeat invalid when a throttle flag was up
+or its clock averaged more than 10% below the run's start, pools the valid repeats, and records the environment (power plan or governor, cores).
+A reading the machine cannot give is `null`. Windows: performance counters (`% Processor Performance` x `Processor Frequency`, ACPI thermal zone),
+no administrator needed, no throttle flag. Linux and Pi: psutil, `/sys`, `vcgencmd get_throttled` (untested on a Pi). To find which sensor disturbs
+a run, set `EDGEBENCH_TELEMETRY_SKIP=clock,temperature,gpu` for the sampler.

@@ -6,7 +6,8 @@ process, started by the server for every conversion. It writes only into ``--out
     python convert.py --op onnx_fp32 --pt model.pt --out workdir --imgsz 640
     python convert.py --op openvino_fp16 --pt model.pt --source workdir_of_onnx_fp32/model.onnx --out workdir2 --imgsz 640
 
-Operations: torchscript, onnx_fp32, onnx_fp16 (needs --source), openvino_fp32 / openvino_fp16 (need --source), ncnn_fp32, ncnn_fp16.
+Operations: torchscript, onnx_fp32, onnx_fp16 (needs --source), openvino_fp32 / openvino_fp16 (need --source), ncnn_fp32, ncnn_fp16,
+and the INT8 pair openvino_int8 / onnx_int8 (need --source and --calibration, a folder of at least 50 pictures).
 Exit code 0 = converted, 1 = failed, 3 = a needed package is missing (reported, not crashed).
 """
 
@@ -28,7 +29,9 @@ os.environ.setdefault("YOLO_AUTOINSTALL", "False")  # a missing package must be 
 
 # Forward-pass tolerance: largest difference from the PyTorch output, relative to the largest PyTorch value.
 TOLERANCE = {"fp32": 1e-3, "fp16": 2e-2}
-NEEDS_SOURCE = {"onnx_fp16", "openvino_fp32", "openvino_fp16"}
+NEEDS_SOURCE = {"onnx_fp16", "openvino_fp32", "openvino_fp16", "openvino_int8", "onnx_int8"}
+MIN_CALIBRATION = 50  # fewer pictures give the quantizer too little to learn the ranges from (docs/phase-0-verdict.md)
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 class Unavailable(Exception):
@@ -52,6 +55,14 @@ def sample_blob(imgsz: int) -> Any:
     img = cv2.imread(str(path)) if path.exists() else None
     if img is None:
         img = np.random.default_rng(0).integers(0, 255, (480, 640, 3), dtype=np.uint8)
+    return letterbox_blob(img, imgsz)
+
+
+def letterbox_blob(img: Any, imgsz: int) -> Any:
+    """A BGR picture as a 1x3xSxS float blob: scaled to fit, centred on grey 114, scaled to 0..1, RGB order."""
+    import numpy as np
+
+    cv2 = need("cv2", "opencv-python")
     h, w = img.shape[:2]
     scale = min(imgsz / h, imgsz / w)
     nw, nh = round(w * scale), round(h * scale)
@@ -110,6 +121,82 @@ def op_openvino(source: Path, out: Path, compress: bool, **_: Any) -> str:
     return "model.xml"
 
 
+def calibration_blobs(folder: Path | None, imgsz: int) -> list[Any]:
+    """The calibration pictures as blobs. Refuses fewer than 50 real pictures: one picture repeated gave a worse model
+    than 128 different ones in Phase 0, and a handful teaches the quantizer too little to trust."""
+    if folder is None or not folder.is_dir():
+        raise ValueError("this INT8 conversion needs a folder of calibration pictures, and none was given")
+    import hashlib
+
+    cv2 = need("cv2", "opencv-python")
+    blobs = []
+    seen: set[str] = set()
+    for path in sorted(p for p in folder.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        img = cv2.imread(str(path))
+        if img is not None and digest not in seen:  # a copy of a picture already given teaches the quantizer nothing
+            seen.add(digest)
+            blobs.append(letterbox_blob(img, imgsz))
+    if len(blobs) < MIN_CALIBRATION:
+        raise ValueError(
+            f"calibration needs at least {MIN_CALIBRATION} different readable pictures and was given {len(blobs)}"
+        )
+    return blobs
+
+
+def detect_head_nodes(model: Any) -> list[str]:
+    """The nodes of the detect head of an Ultralytics export: everything under the highest ``/model.N/`` prefix.
+
+    Quantizing the head with the default settings produced a model that loads, runs and returns no detections at all
+    (docs/phase-0-verdict.md), so it stays in floating point. If the head cannot be found, refuse: the default is worse.
+    """
+    import re
+
+    found = {int(m.group(1)) for n in model.graph.node if (m := re.match(r"/model\.(\d+)/", n.name))}
+    if not found:
+        raise ValueError("the detect head could not be found in this ONNX file, so it cannot be quantized safely")
+    prefix = f"/model.{max(found)}/"
+    return [n.name for n in model.graph.node if n.name.startswith(prefix)]
+
+
+def op_openvino_int8(source: Path, out: Path, imgsz: int, calibration: Path | None, **_: Any) -> str:
+    nncf = need("nncf")
+    ov = need("openvino")
+    blobs = calibration_blobs(calibration, imgsz)
+    quantized = nncf.quantize(ov.convert_model(str(source)), nncf.Dataset(blobs))
+    ov.save_model(quantized, str(out / "model.xml"))
+    return "model.xml"
+
+
+def op_onnx_int8(source: Path, out: Path, imgsz: int, calibration: Path | None, **_: Any) -> str:
+    onnx = need("onnx")
+    quant = need("onnxruntime.quantization", "onnxruntime")
+    model = onnx.load(str(source))
+    head = detect_head_nodes(model)
+    blobs = calibration_blobs(calibration, imgsz)
+    input_name = model.graph.input[0].name
+
+    class Reader(quant.CalibrationDataReader):  # type: ignore[misc]
+        def __init__(self) -> None:
+            self.pictures = iter(blobs)
+
+        def get_next(self) -> dict[str, Any] | None:
+            blob = next(self.pictures, None)
+            return None if blob is None else {input_name: blob}
+
+    quant.quantize_static(
+        str(source),
+        str(out / "model.onnx"),
+        Reader(),
+        quant_format=quant.QuantFormat.QDQ,
+        activation_type=quant.QuantType.QUInt8,
+        weight_type=quant.QuantType.QInt8,
+        nodes_to_exclude=head,
+    )
+    print(f"kept {len(head)} detect-head nodes in floating point", flush=True)
+    return "model.onnx"
+
+
 def op_ncnn(pt: Path, out: Path, imgsz: int, half: bool, **_: Any) -> str:
     need("ncnn")
     need("pnnx")
@@ -165,6 +252,16 @@ def verify(op: str, pt: Path, main: Path, imgsz: int) -> dict[str, Any]:
         return {"ok": False, "error": f"output shape {got.shape} differs from PyTorch's {reference.shape}"}
     scale = float(np.abs(reference).max()) or 1.0
     diff = float(np.abs(got - reference).max())
+    if op.endswith("int8"):
+        # Quantization changes the numbers by design. Whether the model still finds the objects is decided by the drift
+        # check against the .pt baseline on a real dataset, not by a tolerance on one picture.
+        return {
+            "ok": bool(np.isfinite(got).all()),
+            "max_abs_diff": round(diff, 5),
+            "relative": round(diff / scale, 6),
+            "tolerance": None,
+            "note": "INT8 is judged by the drift check on a run, not by a tolerance",
+        }
     limit = TOLERANCE["fp16" if op.endswith("fp16") else "fp32"]
     return {"ok": diff / scale <= limit, "max_abs_diff": round(diff, 5), "relative": round(diff / scale, 6), "tolerance": limit}
 
@@ -207,6 +304,7 @@ def main() -> int:
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--source", type=Path, help="the ONNX FP32 file that onnx_fp16 and openvino_* start from")
     ap.add_argument("--no-simplify", action="store_true")
+    ap.add_argument("--calibration", type=Path, help="a folder of calibration pictures (INT8 operations)")
     args = ap.parse_args()
 
     started = time.perf_counter()
@@ -219,13 +317,22 @@ def main() -> int:
         shutil.copyfile(args.pt, pt)
         if args.op in NEEDS_SOURCE and (args.source is None or not args.source.is_file()):
             raise Unavailable("this variant is built from the ONNX FP32 file, which is not available")
-        common = {"pt": pt, "out": args.out, "imgsz": args.imgsz, "source": args.source, "simplify": not args.no_simplify}
+        common = {
+            "pt": pt,
+            "out": args.out,
+            "imgsz": args.imgsz,
+            "source": args.source,
+            "simplify": not args.no_simplify,
+            "calibration": args.calibration,
+        }
         runners = {
             "torchscript": lambda: op_torchscript(**common),
             "onnx_fp32": lambda: op_onnx_fp32(**common),
             "onnx_fp16": lambda: op_onnx_fp16(**common),
             "openvino_fp32": lambda: op_openvino(compress=False, **common),
             "openvino_fp16": lambda: op_openvino(compress=True, **common),
+            "openvino_int8": lambda: op_openvino_int8(**common),
+            "onnx_int8": lambda: op_onnx_int8(**common),
             "ncnn_fp32": lambda: op_ncnn(half=False, **common),
             "ncnn_fp16": lambda: op_ncnn(half=True, **common),
         }

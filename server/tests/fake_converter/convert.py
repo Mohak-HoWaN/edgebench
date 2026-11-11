@@ -31,6 +31,7 @@ ap.add_argument("--out", required=True, type=Path)
 ap.add_argument("--imgsz", type=int, default=640)
 ap.add_argument("--source", type=Path)
 ap.add_argument("--no-simplify", action="store_true")
+ap.add_argument("--calibration", type=Path)
 args = ap.parse_args()
 
 if log := os.environ.get("FAKE_LOG"):
@@ -41,7 +42,20 @@ if pids := os.environ.get("FAKE_PIDS"):
         f.write(f"{args.op} {os.getpid()}\n")
 
 behavior = behaviors.get(args.op)
-needs_source = args.op in ("onnx_fp16", "openvino_fp32", "openvino_fp16")
+needs_source = args.op in ("onnx_fp16", "openvino_fp32", "openvino_fp16", "openvino_int8", "onnx_int8")
+pictures = sorted(p.name for p in args.calibration.iterdir()) if args.calibration and args.calibration.is_dir() else []
+if args.op.endswith("int8") and len(pictures) < 50:  # the real converter refuses the same way
+    print(
+        "RESULT "
+        + json.dumps(
+            {
+                "ok": False,
+                "kind": "failed",
+                "error": f"calibration needs at least 50 readable pictures and was given {len(pictures)}",
+            }
+        )
+    )
+    sys.exit(1)
 print(f"fake converting {args.op}", flush=True)
 
 if behavior == "hang":
@@ -66,8 +80,12 @@ main = {
     "openvino_fp16": "model.xml",
     "ncnn_fp32": "model.ncnn.param",
     "ncnn_fp16": "model.ncnn.param",
+    "openvino_int8": "model.xml",
+    "onnx_int8": "model.onnx",
 }[args.op]
 (args.out / main).write_text(f"fake {args.op} of {Path(args.pt).name}")
+if pictures:  # lets a test see exactly which pictures the converter was given
+    (args.out / "calibration.txt").write_text("\n".join(pictures))
 if main.endswith(".xml"):  # bundles keep their weights in a second file
     (args.out / "model.bin").write_bytes(b"w" * 1000)
 elif main.endswith(".param"):

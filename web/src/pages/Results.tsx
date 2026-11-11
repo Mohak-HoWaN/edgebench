@@ -4,7 +4,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { STATUS_WORDS, useExperiments, type ExperimentInfo } from "@/lib/experiments";
-import { bestRun, METRIC_BY_KEY, usePriority } from "@/lib/metrics";
+import { bestRun, priorityMetrics, usePriority, type Metric } from "@/lib/metrics";
+
+/** How many of the person's metrics get a column on this page (the experiment page shows all of them). */
+const COLUMNS = 3;
 
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
 
@@ -18,12 +21,11 @@ function progressText(e: ExperimentInfo): string {
 function Row({ e, onOpen }: { e: ExperimentInfo; onOpen: () => void }) {
   const order = usePriority((s) => s.order);
   const runs = e.runs ?? [];
-  const main = METRIC_BY_KEY.get(order[0] ?? "");
-  const second = METRIC_BY_KEY.get(order[1] ?? "");
-  const best = (metric: typeof main) => {
-    const run = metric ? bestRun(runs, metric) : undefined;
-    const value = run && metric ? metric.value(run) : undefined;
-    return run && metric && value !== undefined ? (
+  const shown = priorityMetrics(order).slice(0, COLUMNS);
+  const best = (metric: Metric) => {
+    const run = bestRun(runs, metric, shown);
+    const value = run ? metric.value(run) : undefined;
+    return run && value !== undefined ? (
       <>
         {metric.format(value)}
         <span className="block text-xs text-muted-foreground">
@@ -63,8 +65,11 @@ function Row({ e, onOpen }: { e: ExperimentInfo; onOpen: () => void }) {
         {e.device_name ?? "removed"}
         <span className="block text-xs text-muted-foreground">{when(e.created_at)}</span>
       </td>
-      <td className="py-3 pr-4 tabular-nums">{best(main)}</td>
-      <td className="py-3 tabular-nums">{second ? best(second) : null}</td>
+      {shown.map((m) => (
+        <td key={m.key} className="py-3 pr-4 tabular-nums">
+          {best(m)}
+        </td>
+      ))}
     </tr>
   );
 }
@@ -74,8 +79,7 @@ export default function Results() {
   const navigate = useNavigate();
   const order = usePriority((s) => s.order);
   const body = useRef<HTMLTableSectionElement>(null);
-  const mainLabel = METRIC_BY_KEY.get(order[0] ?? "")?.label ?? "Best";
-  const secondLabel = METRIC_BY_KEY.get(order[1] ?? "")?.label;
+  const shown = priorityMetrics(order).slice(0, COLUMNS);
 
   // Up and Down move between experiments, Enter opens the one in focus (the link in each row does the rest).
   const onKeyDown = (ev: KeyboardEvent) => {
@@ -94,7 +98,7 @@ export default function Results() {
     <>
       <PageHeader
         title="Results"
-        hint="One row per experiment; open one to see every model variant compared in it. The two Best columns follow your metrics in Settings. Keyboard: Up and Down move between experiments, Enter opens the one you are on."
+        hint="One row per experiment; open one to see every model variant compared in it. The Best columns are your first three metrics from Settings, in that order. Keyboard: Up and Down move between experiments, Enter opens the one you are on."
       />
       {experiments.isPending ? (
         <div aria-busy="true" aria-label="Loading experiments">
@@ -113,7 +117,7 @@ export default function Results() {
         <>
           <div className="overflow-x-auto">
             <table
-              className="w-full min-w-[44rem] max-w-5xl text-left text-sm"
+              className="w-full min-w-[52rem] max-w-6xl text-left text-sm"
               onKeyDown={onKeyDown}
             >
               <caption className="sr-only">Experiments, newest first</caption>
@@ -128,12 +132,11 @@ export default function Results() {
                   <th scope="col" className="py-2 pr-4 font-medium">
                     Device and date
                   </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Best {mainLabel}
-                  </th>
-                  <th scope="col" className="py-2 font-medium">
-                    {secondLabel ? `Best ${secondLabel}` : ""}
-                  </th>
+                  {shown.map((m) => (
+                    <th key={m.key} scope="col" className="py-2 pr-4 font-medium">
+                      Best {m.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody ref={body}>

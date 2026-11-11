@@ -1,5 +1,16 @@
-import { bestRun, METRIC_BY_KEY, rankRuns, sameResult, type Metric } from "./metrics";
+import type { Comparison, Drift } from "./experiments";
+import { bestRun, METRIC_BY_KEY, rankRuns, sameResult, throttled, type Metric } from "./metrics";
 import type { RunInfo } from "./runs";
+
+/** Which measurement a run is: the same variant at the same thread count and CPUs. A sweep has many of these per variant. */
+export const configKey = (r: RunInfo) =>
+  `${String(r.model_id)}|${String(r.variant_id)}|${String(r.params?.threads)}|${(r.params?.cpu_list ?? []).join(",")}`;
+
+/** What the server worked out about the runs of an experiment: drift from the baseline and the significance of speed-ups. */
+export interface Judgements {
+  drift: Record<string, Drift>;
+  comparisons: Record<string, Comparison>;
+}
 
 /** How a run is named in a sentence: its model and variant. */
 export const nameOf = (r: RunInfo) => `${r.model_name ?? "A removed model"}, ${r.variant_label}`;
@@ -10,7 +21,11 @@ const signed = (n: number) => `${n >= 0 ? "+" : "-"}${Math.abs(n * 100).toFixed(
  * Plain sentences worked out from an experiment's finished runs: who is fastest, who is most accurate, what is tied, what
  * differs from the PyTorch baseline, what did not finish and how much repeated runs disagree. Nothing here is static help.
  */
-export function experimentInsights(runs: RunInfo[], metrics: Metric[]): string[] {
+export function experimentInsights(
+  runs: RunInfo[],
+  metrics: Metric[],
+  judged: Judgements = { drift: {}, comparisons: {} },
+): string[] {
   const out: string[] = [];
   const done = runs.filter((r) => r.status === "done");
   const waiting = runs.filter((r) => r.status === "queued" || r.status === "running").length;
@@ -70,6 +85,13 @@ export function experimentInsights(runs: RunInfo[], metrics: Metric[]): string[]
       out.push(
         `${nameOf(quick)} is ${(baseMs / quickMs).toFixed(1)}x faster than the PyTorch baseline${delta}.`,
       );
+      const c = judged.comparisons[String(quick.id)];
+      if (c?.significant === false)
+        out.push(
+          `That speed-up is within the noise (p = ${c.p?.toFixed(2) ?? "?"}): the repeats overlap too much to call it real. More repeats would settle it.`,
+        );
+      else if (c?.significant === null && c.note)
+        out.push(`No significance test for it: ${c.note}.`);
     }
     if (accuracy?.value(baseline) !== undefined) {
       const base = accuracy.value(baseline) ?? 0;
@@ -89,13 +111,28 @@ export function experimentInsights(runs: RunInfo[], metrics: Metric[]): string[]
     }
   }
 
-  // repeats of the same variant
+  // accuracy check against the baseline, and runs the machine throttled
+  for (const r of done) {
+    const d = judged.drift[String(r.id)];
+    if (d && !d.verdict.passed)
+      out.push(
+        `${nameOf(r)} fails the accuracy check against the PyTorch baseline: ${d.verdict.reasons.join("; ")}. Its speed does not make up for that.`,
+      );
+  }
+  const hot = done.filter(throttled);
+  if (hot.length > 0)
+    out.push(
+      `${String(hot.length)} run${hot.length === 1 ? " was" : "s were"} throttled (${hot
+        .slice(0, 3)
+        .map(nameOf)
+        .join(
+          "; ",
+        )}): the machine slowed down while it ran, so ${hot.length === 1 ? "its" : "their"} speed is left out of the ranking. Run again once it has cooled.`,
+    );
+
+  // repeats of the same measurement (same variant, threads and CPUs; a sweep over threads is not a repeat)
   const groups = new Map<string, RunInfo[]>();
-  for (const r of done)
-    groups.set(`${String(r.model_id)}|${String(r.variant_id)}`, [
-      ...(groups.get(`${String(r.model_id)}|${String(r.variant_id)}`) ?? []),
-      r,
-    ]);
+  for (const r of done) groups.set(configKey(r), [...(groups.get(configKey(r)) ?? []), r]);
   for (const group of groups.values()) {
     const times = group.map((r) => p50?.value(r)).filter((v): v is number => v !== undefined);
     const [head] = group;
@@ -107,8 +144,15 @@ export function experimentInsights(runs: RunInfo[], metrics: Metric[]): string[]
       );
     }
   }
+  const withInterval = done.filter((r) => (r.latency?.n ?? 1) >= 2).length;
   if (!Array.from(groups.values()).some((g) => g.length > 1) && done.length > 1) {
-    out.push("Each variant was run once. Run one again before trusting a small difference.");
+    out.push(
+      withInterval === 0
+        ? "Each variant was run once. Run one again before trusting a small difference."
+        : withInterval === done.length
+          ? "Each run has several timed repeats, so its speed carries an interval; a difference smaller than the interval is noise."
+          : "Some runs have a single repeat and so no error bar. Use more repeats before trusting a small difference.",
+    );
   }
 
   const problems = runs.filter((r) =>

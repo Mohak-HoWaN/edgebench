@@ -200,10 +200,13 @@ class Converter:
         simplify: bool,
         cancelled: Callable[[], bool],
         on_line: Callable[[str], None],
+        calibration: Path | None = None,
     ) -> Outcome:
         args = [str(self.convert_script), "--op", op, "--pt", str(pt), "--out", str(out), "--imgsz", str(imgsz)]
         if source is not None:
             args += ["--source", str(source)]
         if not simplify:
             args.append("--no-simplify")
+        if calibration is not None:
+            args += ["--calibration", str(calibration)]
         return self._run(args, self.settings.converter_timeout_seconds, cancelled, on_line)

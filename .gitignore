@@ -35,3 +35,6 @@ graphify-out/manifest.json
 graphify-out/.graphify_root
 graphify-out/.graphify_labels.pending.json
 graphify-out/20*/
+
+# Mine
+conversation.txt

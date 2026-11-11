@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EdgeBench converts a vision model (`.pt`) into every runtime format and precision, benchmarks each variant on each device (this PC, a Raspberry
 Pi), and turns the results into a dashboard and a paper. It is built in phases (`phases/phase-0` to `phase-9`, each file is that phase's brief).
-**Read `STATE.md` first**: it says what is built, what was verified, and what was not. Update it before ending a session. Phases 0 to 3 are done (models and
-conversion, datasets, the PC agent, single benchmark runs); sweeps, INT8, telemetry, the Pi, reports and the JonaRu bridge (Phases 4 to 9) do not
-exist yet, so `Live run` and `Reports` are honest empty states. `HANDOFF.md` is a short brief for a fresh session.
+**Read `STATE.md` first**: it says what is built, what was verified, and what was not. Update it before ending a session. Phases 0 to 4 are done (models and
+conversion, datasets, the PC agent, experiments, sweeps with repeats and confidence intervals, telemetry, the accuracy check, INT8); the Pi,
+reports and the JonaRu bridge (Phases 5 to 9) do not exist yet, so `Reports` is an honest empty state. `HANDOFF.md` is a short brief for a fresh session.
 
 Decisions that are binding live in `docs/adr/0001` to `0004` (queue, artifact store, agent protocol, statistics) and `docs/phase-0-verdict.md`
 (which conversion variants work and which were dropped). Do not re-decide them without evidence.
@@ -123,6 +123,22 @@ puts `server/` on the path), so they need `.venv-agent`. Web: `lib/metrics.ts` h
 in the browser); `lib/history.ts` feeds the back/forward buttons from the router. The charts, more model families and dataset formats are in
 `docs/brief-charts-and-families.md`.
 
+**Sweeps, repeats, telemetry, drift and INT8 (Phase 4).** A run is `repeats` timed rounds, each with its own warm-up (`bench.py`
+`speed_pass`; ADR 0004). The agent (`agent.py` `_run_child`) starts `telemetry.py` as a **separate process** beside the benchmark child (5 Hz,
+NDJSON; Windows performance counters through `ctypes`/pdh, psutil, `vcgencmd` on a Pi, NVML if present); a reading the machine cannot give is
+`null`, never 0. `repeats.py` (pure) merges the samples into each repeat's window, marks a repeat invalid when a throttle flag was up or the
+clock averaged more than 10% below where the run started, and pools the valid ones; a run with no valid repeat is "invalid for latency" and
+is left out of speed rankings. The server computes everything derived **when a run is read**, so old runs show the same way: `latency.py`
+(headline = mean of repeat medians, Student t interval; `compare` = Welch test against the baseline run at the same settings), `drift.py`
+(mean box agreement with the baseline's detections, mAP and per-class AP deltas, class flips, pass/fail against limits that the browser sends as
+query parameters, defaults in `Thresholds`), `stats.py` (no scipy; checked against scipy in the tests). `sweep.py` (pure) expands
+variant x threads x CPU sets x input size, prunes what cannot run with the reason, and estimates the time; `api_experiments.py` has `/plan`,
+`/resume` (remakes only cancelled and lost runs) and keeps the plan in `Experiment.plan`. INT8: `OpenVINO INT8` (NNCF) and `ONNX INT8` (QDQ, the
+detect head found as the highest `/model.N/` prefix and kept in float) are `matrix.OPS` with `calibrated=True`, so "convert everything" never
+makes them; `calibration.py` picks at least 50 **different** pictures (by content hash) from a dataset version, stores the list in the artifact
+store and keeps only its hash in the variant's settings; the converter refuses fewer than 50 distinct pictures too. Whether an INT8 variant is
+still good is the accuracy check in an experiment that also holds the `.pt` baseline, not a tolerance.
+
 ## Traps that already cost time
 
 - **shadcn-generated files are patched** (`web/src/components/ui/command.tsx`, `button.tsx`, `sonner.tsx`; listed in `STATE.md`). Regenerating them
@@ -157,6 +173,12 @@ in the browser); `lib/history.ts` feeds the back/forward buttons from the router
 - An empty YOLO `.txt` label file is real data (a picture with nothing in it); do not reject empty uploads for labels.
 - A bundle's file that is already in the store is skipped, not re-verified against the bundle's copy; to test the checksum check, use a file the
   store has never seen.
+- On Windows a venv's `python.exe` is a launcher that starts the real interpreter as a child, so `Popen.pid` is not the pid the process reports
+  for itself. The telemetry sampler sums memory over the whole child tree for that reason, and its test compares against the process tree.
+- Windows gives no throttle flag without administrator rights: a throttled repeat there is caught only by the clock dropping more than 10%.
+  The temperature is the ACPI thermal zone (the chassis), not the CPU die; the page says so. None of this was checked on a Raspberry Pi.
+- A hook called after an early `return` in a React component fails the lint (`usePlan` in `NewExperiment.tsx` sits above the loading return on purpose).
+- Shared pytest fixtures live in `server/tests/conftest.py` (`mclient` and `fake_env` moved there); importing a fixture into a test module trips ruff F811.
 - A zip stores a timestamp, so test fixtures that must be byte-identical (dedupe by hash) set a fixed `date_time`.
 - In PowerShell a double backtick inside a double-quoted string is an escape, which silently breaks text replacement of Markdown-style code spans;
   use single-quoted strings or the edit tool.

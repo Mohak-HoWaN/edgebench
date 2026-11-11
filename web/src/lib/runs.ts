@@ -15,6 +15,9 @@ export interface RunParams {
   max_images?: number | null;
   /** Logical CPU numbers the benchmark was pinned to. */
   cpu_list?: number[] | null;
+  /** Timed repeats, each with its own warm-up (ADR 0004). Absent on runs made before repeats existed. */
+  repeats?: number;
+  telemetry?: boolean;
 }
 
 export interface Stage {
@@ -25,6 +28,46 @@ export interface Stage {
   p95: number;
   p99: number;
   max: number;
+}
+
+/** What the machine did during one window of time: a repeat, or the whole run. `null` means not available, never zero. */
+export interface TelemetryWindow {
+  samples: number;
+  cpu_mean: number | null;
+  cpu_max: number | null;
+  cpu_per_core_mean: number[] | null;
+  rss_peak_mb: number | null;
+  clock_mhz_mean: number | null;
+  clock_mhz_min: number | null;
+  temp_c_start: number | null;
+  temp_c_max: number | null;
+  throttled: boolean | null;
+  gpu_util_mean: number | null;
+  gpu_mem_peak_mb: number | null;
+  gpu_temp_c_max: number | null;
+}
+
+export interface Repeat {
+  index: number;
+  stats: Stage;
+  total_ms: number[];
+  valid: boolean;
+  invalid_reason: string | null;
+  telemetry?: TelemetryWindow;
+}
+
+/** The headline latency: mean of the repeats' medians, with a 95% interval over the repeats (ADR 0004). */
+export interface Latency {
+  p50_ms: number;
+  ci_half_width_ms: number | null;
+  n: number;
+  /** Fewer than five repeats: the interval is too wide to lean on. */
+  wide: boolean;
+  repeats: number;
+  valid_repeats: number;
+  /** False when every repeat was throttled: the run is shown, but its latency is not to be compared. */
+  valid: boolean;
+  fps: number | null;
 }
 
 export interface Accuracy {
@@ -61,6 +104,24 @@ export interface RunResult {
     iterations: number;
     pictures_cycled: number;
     stages: Record<"preprocess" | "inference" | "postprocess" | "total", Stage>;
+    repeats_requested?: number;
+    repeats?: Repeat[];
+    valid_repeats?: number;
+    latency_valid?: boolean;
+  };
+  telemetry?: {
+    enabled: boolean;
+    hz?: number;
+    /** What each reading is on this machine; null where it is not available here. */
+    sources?: Record<string, string | null>;
+    start_clock_mhz?: number | null;
+    run?: TelemetryWindow;
+  };
+  environment?: {
+    logical_cores: number | null;
+    physical_cores: number | null;
+    power_plan: string | null;
+    governor: string | null;
   };
   accuracy?: Accuracy;
   dataset?: { hash: string; images: number };
@@ -87,6 +148,7 @@ export interface RunInfo {
   progress: number | null;
   message: string | null;
   result: RunResult | null;
+  latency: Latency | null;
   error: string | null;
   created_at: string;
   started_at: string | null;

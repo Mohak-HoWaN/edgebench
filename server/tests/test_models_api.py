@@ -9,7 +9,7 @@ import sys
 import time
 import zipfile
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -26,7 +26,7 @@ from edgebench.models import Variant
 from edgebench.worker import Worker
 
 FAKE = Path(__file__).parent / "fake_converter"
-ALL_OPS = [op.name for op in OPS]
+ALL_OPS = [op.name for op in OPS if not op.calibrated]  # INT8 needs a calibration subset, so it is added on its own
 FINAL = {"ready", "failed", "unavailable", "cancelled"}
 
 
@@ -38,25 +38,6 @@ def checkpoint_bytes(extra: Any = None) -> bytes:
         entry = zipfile.ZipInfo("model/data.pkl", date_time=(2026, 1, 1, 0, 0, 0))
         z.writestr(entry, pickle.dumps(OrderedDict(model=OrderedDict(), extra=extra), protocol=2))
     return buf.getvalue()
-
-
-@pytest.fixture
-def fake_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    log = tmp_path / "runs.log"
-    monkeypatch.setenv("FAKE_LOG", str(log))
-    monkeypatch.setenv("FAKE_PIDS", str(tmp_path / "pids.log"))
-    monkeypatch.delenv("FAKE_BEHAVIOR", raising=False)
-    monkeypatch.delenv("FAKE_INSPECT", raising=False)
-    return log
-
-
-@pytest.fixture
-def mclient(settings: Settings, fake_env: Path) -> Iterator[TestClient]:
-    configured = settings.model_copy(
-        update={"converter_python": Path(sys.executable), "converter_dir": FAKE, "converter_timeout_seconds": 60}
-    )
-    with TestClient(create_app(configured)) as c:
-        yield c
 
 
 def upload(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from edgebench import api_agent
 from edgebench.config import Settings
 from edgebench.db import make_engine, migrate
 from edgebench.main import create_app
+
+FAKE = Path(__file__).parent / "fake_converter"
 
 
 @pytest.fixture
@@ -44,3 +47,22 @@ def short_poll(monkeypatch: pytest.MonkeyPatch) -> None:
     """An agent's claim waits for a job; in tests an empty queue must answer in a fraction of a second, not 25 s."""
     monkeypatch.setattr(api_agent, "LONG_POLL_SECONDS", 0.3)
     monkeypatch.setattr(api_agent, "POLL_EVERY", 0.05)
+
+
+@pytest.fixture
+def fake_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    log = tmp_path / "runs.log"
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setenv("FAKE_PIDS", str(tmp_path / "pids.log"))
+    monkeypatch.delenv("FAKE_BEHAVIOR", raising=False)
+    monkeypatch.delenv("FAKE_INSPECT", raising=False)
+    return log
+
+
+@pytest.fixture
+def mclient(settings: Settings, fake_env: Path) -> Iterator[TestClient]:
+    configured = settings.model_copy(
+        update={"converter_python": Path(sys.executable), "converter_dir": FAKE, "converter_timeout_seconds": 60}
+    )
+    with TestClient(create_app(configured)) as c:
+        yield c

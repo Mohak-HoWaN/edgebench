@@ -30,7 +30,8 @@ interface Box {
   dashed?: boolean;
 }
 
-/** A picture with boxes over it, positioned by percentage so they follow however the picture is scaled. */
+/** A picture with boxes over it, positioned by percentage so they follow however the picture is scaled. A label wraps instead of
+ * being cut, sits above its box (inside it when the box touches the top) and grows leftwards from boxes on the right half. */
 function Boxed({ src, alt, boxes }: { src: string; alt: string; boxes: Box[] }) {
   return (
     <div className="relative overflow-hidden rounded-md border bg-muted">
@@ -49,7 +50,11 @@ function Boxed({ src, alt, boxes }: { src: string; alt: string; boxes: Box[] }) 
           }}
         >
           <span
-            className="absolute -top-px left-0 max-w-full -translate-y-full truncate px-1 text-[10px] leading-4 text-white"
+            className={cn(
+              "absolute w-max max-w-[7.5rem] whitespace-normal break-words px-1 text-[10px] leading-3 text-white",
+              b.x1 > 0.5 ? "right-0" : "left-0",
+              b.y1 < 0.08 ? "top-0" : "-top-px -translate-y-full",
+            )}
             style={{ background: b.colour }}
           >
             {b.label}
@@ -66,11 +71,19 @@ interface Inspection {
     run_id: number;
     model_name: string | null;
     variant_label: string;
+    threads: number | null;
+    cpu_list: number[] | null;
     status: string;
     class_names: string[];
     detections: number[][] | null;
   }[];
 }
+
+/** "4 threads", or "4 threads, CPUs 0,1": what separates runs of the same variant. */
+const settingsOf = (run: Inspection["runs"][number]) =>
+  run.threads === null
+    ? ""
+    : `${String(run.threads)} thread${run.threads === 1 ? "" : "s"}${run.cpu_list?.length ? `, CPUs ${run.cpu_list.join(",")}` : ""}`;
 
 /**
  * The pictures of the experiment's dataset version, on the right of the page: choose one and see, side by side, the real boxes and
@@ -226,7 +239,7 @@ export function PictureInspector({ e }: { e: ExperimentInfo }) {
                   <figure key={run.run_id} className="space-y-1">
                     <Boxed
                       src={src(picked)}
-                      alt={`Picture ${String(picked + 1)} with what ${run.model_name ?? "the model"}, ${run.variant_label} found`}
+                      alt={`Picture ${String(picked + 1)} with what ${run.model_name ?? "the model"}, ${run.variant_label}, ${settingsOf(run)}, run ${String(run.run_id)} found`}
                       boxes={found.map((d) => {
                         const [x1 = 0, y1 = 0, x2 = 0, y2 = 0, score = 0, c = 0] = d;
                         return {
@@ -242,7 +255,9 @@ export function PictureInspector({ e }: { e: ExperimentInfo }) {
                     <figcaption className="text-xs">
                       <span className="font-medium">
                         {run.model_name}, {run.variant_label}
+                        {settingsOf(run) ? `, ${settingsOf(run)}` : ""}
                       </span>
+                      <span className="block text-muted-foreground">Run {run.run_id}</span>
                       <span className="block text-muted-foreground">
                         {run.detections === null
                           ? run.status === "done"

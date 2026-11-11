@@ -22,23 +22,11 @@ import numpy as np
 from .dataset import Dataset, Entry, load_rgb, open_dataset, truth_boxes
 from .decode import decode, letterbox, to_blob, to_original
 from .evaluate import Accumulator, Metrics
+from .repeats import finalize, stats_ms
 from .runtimes import Runner, Unavailable, load_runner, package_versions
 
 NS = 1_000_000.0  # nanoseconds per millisecond
 CYCLE_PICTURES = 16  # pictures kept in memory for the speed pass
-
-
-def stats(samples_ns: list[int]) -> dict[str, float]:
-    ms = np.asarray(samples_ns, dtype=np.float64) / NS
-    return {
-        "mean": float(ms.mean()),
-        "std": float(ms.std()),
-        "min": float(ms.min()),
-        "p50": float(np.percentile(ms, 50)),
-        "p95": float(np.percentile(ms, 95)),
-        "p99": float(np.percentile(ms, 99)),
-        "max": float(ms.max()),
-    }
 
 
 def class_map(dataset_names: list[str], model_names: list[str], generic: bool) -> tuple[dict[int, int], list[str], str]:
@@ -162,36 +150,47 @@ def metrics_dict(m: Metrics, names: list[str], acc: Accumulator) -> dict[str, An
 
 
 def speed_pass(runner: Runner, entries: list[Entry], spec: dict[str, Any], progress: Any) -> dict[str, Any]:
+    """``repeats`` timed rounds. Each has its own warm-up, then ``iterations`` timed iterations over the cycled
+    pictures, and records the wall-clock window it covered so the telemetry of that window can be found afterwards."""
     pictures = [load_rgb(e.path) for e in entries[:CYCLE_PICTURES]]
-    warmup, iterations = int(spec["warmup"]), int(spec["iterations"])
-    columns: list[tuple[int, int, int]] = []
-    for i in range(warmup + iterations):
-        _, timing = one_picture(
-            runner,
-            pictures[i % len(pictures)],
-            spec["imgsz"],
-            spec["conf"],
-            spec["iou"],
-            spec["max_det"],
+    warmup, iterations, repeats = int(spec["warmup"]), int(spec["iterations"]), max(1, int(spec.get("repeats") or 1))
+    per_repeat = warmup + iterations
+    done: list[dict[str, Any]] = []
+    for index in range(repeats):
+        columns: list[tuple[int, int, int]] = []
+        t_start = time.time()
+        for i in range(per_repeat):
+            if i == warmup:
+                t_start = time.time()  # the window is the timed part only
+            _, timing = one_picture(
+                runner, pictures[i % len(pictures)], spec["imgsz"], spec["conf"], spec["iou"], spec["max_det"]
+            )
+            if i >= warmup:
+                columns.append(timing)
+            if i % 5 == 0:
+                progress(0.5 + 0.5 * (index * per_repeat + i + 1) / (repeats * per_repeat))
+        t_end = time.time()
+        pre, inf, post = ([c[k] / NS for c in columns] for k in range(3))
+        total = [(a + b + c) / NS for a, b, c in columns]
+        done.append(
+            {
+                "index": index,
+                "t_start": t_start,
+                "t_end": t_end,
+                "stats": stats_ms(total),
+                "samples_ms": {"preprocess": pre, "inference": inf, "postprocess": post, "total": total},
+            }
         )
-        if i >= warmup:
-            columns.append(timing)
-        if i % 5 == 0:
-            progress(0.5 + 0.5 * (i + 1) / (warmup + iterations))
-    pre, inf, post = ([c[k] for c in columns] for k in range(3))
-    total = [a + b + c for a, b, c in columns]
-    return {
-        "warmup": warmup,
-        "iterations": iterations,
-        "pictures_cycled": len(pictures),
-        "stages": {
-            "preprocess": stats(pre),
-            "inference": stats(inf),
-            "postprocess": stats(post),
-            "total": stats(total),
+    return finalize(
+        {
+            "warmup": warmup,
+            "iterations": iterations,
+            "repeats_requested": repeats,
+            "pictures_cycled": len(pictures),
+            "repeats": done,
         },
-        "total_ms": [round(t / NS, 3) for t in total],
-    }
+        strip=False,
+    )
 
 
 def pin_to_cpus(cpus: list[int] | None) -> list[int] | None:

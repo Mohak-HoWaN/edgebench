@@ -15,6 +15,8 @@ export interface Metric {
   /** What it tells you, for the "i" next to it. */
   hint: string;
   value: (run: RunInfo) => number | undefined;
+  /** A line under the number in a table cell (an interval, a caveat). */
+  detail?: (run: RunInfo) => string | undefined;
   format: (n: number) => string;
   /** Two values closer than this are the same result (what the page would show): ties are broken by the next metric. */
   step: number;
@@ -26,6 +28,11 @@ const count = (n: number) => String(Math.round(n));
 const acc = (run: RunInfo): Accuracy | undefined =>
   run.result?.accuracy?.available ? run.result.accuracy : undefined;
 const total = (run: RunInfo) => run.result?.speed?.stages.total;
+/** The headline median: the mean of the repeats' medians. None when every repeat was throttled (the run is not comparable). */
+const headline = (run: RunInfo): number | undefined =>
+  run.latency ? (run.latency.valid ? run.latency.p50_ms : undefined) : total(run)?.p50;
+/** A speed metric that is missing because the run was throttled, not because it was never measured. */
+export const throttled = (run: RunInfo) => run.status === "done" && run.latency?.valid === false;
 
 /** Counts at confidence 0.25 and overlap 0.45, from the confusion matrix (rows: truth, columns: answer, last: nothing). */
 export function confusionCounts(
@@ -172,8 +179,13 @@ export const METRICS: Metric[] = [
     short: "Median time",
     group: "speed",
     higher: false,
-    hint: "The typical time for one image, start to finish. Lower is faster.",
-    value: (r) => total(r)?.p50,
+    hint: "The typical time for one image, start to finish: the mean of each repeat's median, with the 95% interval across repeats under it. Lower is faster. A run whose repeats were all throttled has no value here.",
+    value: headline,
+    detail: (r) => {
+      const l = r.latency;
+      if (!l?.valid || l.ci_half_width_ms === null) return undefined;
+      return `± ${l.ci_half_width_ms.toFixed(1)} ms (${String(l.valid_repeats)} repeats${l.wide ? ", wide" : ""})`;
+    },
     format: ms,
     step: 0.1,
   },
@@ -184,7 +196,7 @@ export const METRICS: Metric[] = [
     group: "speed",
     higher: false,
     hint: "The time that 95 of 100 images beat. Matters when an occasional slow image is a problem.",
-    value: (r) => total(r)?.p95,
+    value: (r) => (r.latency?.valid === false ? undefined : total(r)?.p95),
     format: ms,
     step: 0.1,
   },
@@ -196,7 +208,7 @@ export const METRICS: Metric[] = [
     higher: true,
     hint: "How many images it handles each second at the median time. Higher is faster.",
     value: (r) => {
-      const p50 = total(r)?.p50;
+      const p50 = headline(r);
       return p50 ? 1000 / p50 : undefined;
     },
     format: (n) => n.toFixed(1),

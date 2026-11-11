@@ -14,6 +14,7 @@ class Op:
     format: str
     precision: str
     needs: str | None = None  # the op whose output this one is built from
+    calibrated: bool = False  # INT8: needs a calibration subset, so it is never made by "convert everything"
 
     @property
     def label(self) -> str:
@@ -29,6 +30,8 @@ OPS: tuple[Op, ...] = (
     Op("openvino_fp16", "OpenVINO", "FP16", needs="onnx_fp32"),
     Op("ncnn_fp32", "ncnn", "FP32"),
     Op("ncnn_fp16", "ncnn", "FP16"),
+    Op("openvino_int8", "OpenVINO", "INT8", needs="onnx_fp32", calibrated=True),
+    Op("onnx_int8", "ONNX", "INT8", needs="onnx_fp32", calibrated=True),
 )
 BY_NAME = {op.name: op for op in OPS}
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
-from . import queue
+from . import latency, queue
 from .api_models import services
 from .dataset_versions import find_version
 from .models import Dataset, DatasetVersion, Device, Job, MlModel, Run, Variant
@@ -23,8 +23,10 @@ RUNTIME_OF = {"ONNX": "onnx", "OpenVINO": "openvino", "ncnn": "ncnn", "TorchScri
 
 class RunParams(BaseModel):
     threads: int = Field(default=4, ge=1, le=1024)
-    warmup: int = Field(default=10, ge=0, le=10_000)
-    iterations: int = Field(default=100, ge=1, le=100_000)
+    warmup: int = Field(default=20, ge=0, le=10_000)  # per repeat
+    iterations: int = Field(default=200, ge=1, le=100_000)  # per repeat
+    repeats: int = Field(default=3, ge=1, le=100)  # ADR 0004: three give a wide interval, five or more a useful one
+    telemetry: bool = True  # sample CPU, memory, clock and temperature in a separate process while the run goes
     accuracy: bool = True
     # Ultralytics' validator settings, so accuracy is comparable with model.val()
     conf: float = Field(default=0.001, gt=0, lt=1)
@@ -63,6 +65,7 @@ class RunOut(BaseModel):
     progress: float | None
     message: str | None
     result: dict[str, Any] | None
+    latency: dict[str, Any] | None  # headline latency with its interval over the repeats (latency.summary)
     error: str | None
     created_at: datetime
     started_at: datetime | None
@@ -81,16 +84,23 @@ def runtime_for(variant: Variant | None) -> str:
     return "pytorch" if variant is None else RUNTIME_OF[variant.format]
 
 
-def variant_label(variant: Variant | None, model: MlModel | None) -> str:
-    """E.g. "ONNX FP32", plus the input size if it is not the model's own, and a note if not simplified."""
-    if variant is None:
-        return BASELINE_LABEL
-    label = f"{variant.format} {variant.precision}"
-    if model is not None and model.imgsz and variant.imgsz != model.imgsz:
-        label += f" at {variant.imgsz} px"
+def cell_label(variant: Variant, size_note: str = "") -> str:
+    """E.g. "ONNX FP32", or "OpenVINO INT8, 200 calibration images", or "ONNX FP32, not simplified"."""
+    label = f"{variant.format} {variant.precision}{size_note}"
+    calibration = variant.settings.get("calibration")
+    if calibration:
+        label += f", {calibration['count']} calibration images"
     if variant.settings.get("simplify") is False:
         label += ", not simplified"
     return label
+
+
+def variant_label(variant: Variant | None, model: MlModel | None) -> str:
+    """``cell_label`` plus the input size if it is not the model's own."""
+    if variant is None:
+        return BASELINE_LABEL
+    own = model is None or not model.imgsz or variant.imgsz == model.imgsz
+    return cell_label(variant, "" if own else f" at {variant.imgsz} px")
 
 
 def run_out(s: Services, session: Session, run: Run) -> RunOut:
@@ -122,6 +132,7 @@ def run_out(s: Services, session: Session, run: Run) -> RunOut:
         progress=live.get("fraction") if status == "running" else None,
         message=live.get("message") if status == "running" else None,
         result=run.result,
+        latency=latency.summary((run.result or {}).get("speed")),
         error=run.error or (job.error if job and status in ("failed", "lost") else None),
         created_at=run.created_at,
         started_at=run.started_at,

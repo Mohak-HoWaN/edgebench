@@ -127,7 +127,7 @@ def test_settings_that_the_device_cannot_do_stop_the_whole_experiment(client: Te
             "items": [{"model_id": model_id, "variant_id": variant_id}],
         },
     )
-    assert r.status_code == 422 and "can run 4 threads" in r.json()["detail"]
+    assert r.status_code == 422 and "16 threads do not fit on the device's 4 CPUs" in r.json()["detail"]
     assert client.get("/api/experiments").json() == []
 
 

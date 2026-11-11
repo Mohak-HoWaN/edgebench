@@ -2,6 +2,7 @@ import { Download, Loader2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { AddInt8 } from "@/components/AddInt8";
 import { AddVariant } from "@/components/AddVariant";
 import { ConverterBanner } from "@/components/ConverterBanner";
 import { EmptyState } from "@/components/EmptyState";
@@ -167,6 +168,16 @@ export default function ModelDetail() {
       {m.status === "ready" ? (
         <Section title="Add a conversion of your own">
           <AddVariant model={m} />
+        </Section>
+      ) : null}
+
+      {m.status === "ready" ? (
+        <Section
+          title="Add an INT8 conversion"
+          id="int8"
+          hint="INT8 stores the model in whole numbers: smaller and often much faster on a CPU, but it can lose accuracy or, done wrongly, stop finding anything. It is never made by 'convert what is missing'. It learns from real pictures of a dataset, and an experiment with the PyTorch baseline tells you whether it is still good."
+        >
+          <AddInt8 model={m} />
         </Section>
       ) : null}
 

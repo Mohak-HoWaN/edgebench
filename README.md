@@ -86,7 +86,7 @@ on each agent by hash.
 | 1 | `phases/phase-1-scaffold.md` | **Done 2026-11-09.** App opens with navigation, themes, health check, empty states |
 | 2 | `phases/phase-2-models-conversion.md` | **Done 2026-11-10.** Upload `yolo11n.pt`, watch the conversion grid fill in, download any variant. Needs the converter environment (`converter/README.md`); see `STATE.md` |
 | 3 | `phases/phase-3-datasets-first-run.md` | **Done 2026-11-10 (INT8 and the calibration-set use are Phase 4).** Versioned datasets from loose photos, folders or zips; the PC agent; named experiments that compare many variants with mAP and latency; priorities in Settings; see `agent/README.md` and `STATE.md`. Owner's review of the same day is in `STATE.md`; the charts brief is `docs/brief-charts-and-families.md` |
-| 4 | `phases/phase-4-telemetry-sweeps-int8.md` | Sweeps, repeats, confidence intervals, drift flag, working INT8 |
+| 4 | `phases/phase-4-telemetry-sweeps-int8.md` | **Done 2026-11-10 (PC only).** Sweeps over threads, CPU sets and input sizes with a plan and time estimate; repeats with 95% intervals and a Welch test against the baseline; telemetry in a separate process; throttled repeats marked and left out; the accuracy check against the `.pt` baseline with limits in Settings; INT8 (OpenVINO NNCF, ONNX QDQ) calibrated on your pictures. Numbers and what was not checked: `STATE.md` |
 | 5 | `phases/phase-5-pi-agent.md` | The same experiment runs on the Pi with throttle tracking |
 | 6 | `phases/phase-6-results-explorer.md` | Pareto, box plots, heatmaps, compare 4 runs, failure browser |
 | 7 | `phases/phase-7-report.md` | Pick a paper template (IEEE, ACM, Springer, Elsevier, arXiv-style...), get PDF + LaTeX zip + reproduce script |
@@ -96,7 +96,7 @@ on each agent by hash.
 Never start a phase until the previous one's acceptance block passes and a short "State / Not checked" note is added to
 `STATE.md` (create it in Phase 1).
 
-## Run it (state after Phase 3)
+## Run it (state after Phase 4)
 
 Windows PowerShell shown; on Linux use `.venv/bin/python`.
 

@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlmodel import Session, col, select
 
-from . import queue
+from . import calibration, queue
 from .matrix import BY_NAME, OPS, Op, cache_key, settings_for, settings_key
 from .models import Artifact, MlModel, Variant, utcnow
 from .services import Services
@@ -74,6 +74,8 @@ def ensure_matrix(s: Services, model_id: int) -> list[int]:
         if model is None or model.archived or model.status != "ready" or not model.artifact_sha256 or not model.imgsz:
             return []
         for op in OPS:
+            if op.calibrated:
+                continue  # INT8 needs a calibration subset the person chooses, so it is added on its own
             settings = settings_for(op)
             key = settings_key(settings)
             existing = session.exec(
@@ -112,10 +114,21 @@ def ensure_matrix(s: Services, model_id: int) -> list[int]:
     return to_queue
 
 
-def add_variant(s: Services, model_id: int, op_name: str, imgsz: int, simplify: bool = True) -> list[int]:
-    """Add one custom cell (another input size, or an unsimplified ONNX export) and, if it is built from another cell,
-    that cell too. Cells that already exist are left alone unless they failed. Returns the queued ids."""
+def add_variant(
+    s: Services,
+    model_id: int,
+    op_name: str,
+    imgsz: int,
+    *,
+    simplify: bool = True,
+    calibration_plan: dict[str, Any] | None = None,
+) -> list[int]:
+    """Add one custom cell (another input size, an unsimplified ONNX export, or an INT8 conversion with its calibration)
+    and, if it is built from another cell, that cell too. Cells that already exist are left alone unless they failed.
+    Returns the queued ids."""
     op = BY_NAME[op_name]
+    if op.calibrated and calibration_plan is None:
+        raise ValueError(f"{op.label} needs a calibration subset")
     chain: list[Op] = []
     step: Op | None = op
     while step is not None:
@@ -131,6 +144,8 @@ def add_variant(s: Services, model_id: int, op_name: str, imgsz: int, simplify: 
             settings = settings_for(cell)
             if cell is op and cell.name == "onnx_fp32":
                 settings = {"simplify": simplify}
+            if cell is op and calibration_plan is not None:
+                settings = {"calibration": calibration_plan}
             key = settings_key(settings)
             existing = session.exec(
                 select(Variant).where(
@@ -286,7 +301,7 @@ def make_inspect_handler(s: Services) -> Handler:
             class_names=card["class_names"],
         )
         ensure_matrix(s, model_id)
-        return {"status": "ready", "variants": len(OPS)}
+        return {"status": "ready", "variants": len([op for op in OPS if not op.calibrated])}
 
     return inspect_job
 
@@ -334,12 +349,23 @@ class _Conversion:
             self._set(state="failed", error=why_not)
             return {"state": "failed"}
         workdir = self.s.store.new_workdir()
+        pictures = (
+            self.s.store.new_workdir() if self.op.calibrated else None
+        )  # calibration pictures, kept out of the result
         try:
-            return self._convert(workdir, source)
+            if pictures is not None:
+                try:
+                    calibration.extract(self.s, self.v.settings["calibration"], pictures)
+                except calibration.CalibrationProblem as exc:
+                    self._set(state="failed", error=str(exc))
+                    return {"state": "failed"}
+            return self._convert(workdir, source, pictures)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)  # already moved into the store on success; this is then a no-op
+            if pictures is not None:
+                shutil.rmtree(pictures, ignore_errors=True)
 
-    def _convert(self, workdir: Path, source: Path | None) -> dict[str, Any]:
+    def _convert(self, workdir: Path, source: Path | None, pictures: Path | None = None) -> dict[str, Any]:
         s = self.s
         outcome = s.converter.run_convert(
             op=self.op.name,
@@ -350,6 +376,7 @@ class _Conversion:
             simplify=bool(self.v.settings.get("simplify", True)),
             cancelled=lambda: queue.cancel_requested(s.engine, self.ctx.job) or self.ctx.lost.is_set(),
             on_line=self._on_line,
+            calibration=pictures,
         )
         log = outcome.log[-LOG_KEEP:]
         if outcome.reason == "cancelled":

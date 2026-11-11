@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 from starlette.background import BackgroundTask
 
-from . import queue
+from . import calibration, queue
 from .artifacts import TooLarge
 from .matrix import BY_NAME
 from .model_jobs import add_variant, cancel_variant, ensure_matrix, register_artifact, retry_variant
@@ -69,6 +69,15 @@ class NewVariant(BaseModel):
     op: str
     imgsz: int = Field(ge=32, le=2048)
     simplify: bool = True  # only the ONNX FP32 export has this choice
+
+
+class NewInt8(BaseModel):
+    op: str  # openvino_int8 or onnx_int8
+    imgsz: int | None = Field(default=None, ge=32, le=2048)  # None: the model's own size
+    dataset_id: int  # the pictures the quantizer learns the value ranges from
+    dataset_version: int | None = None  # None: the newest finished version
+    count: int | None = Field(default=None, ge=1, le=5000)  # None (with no seed): the subset the dataset already picked
+    seed: int | None = None
 
 
 class ConverterOut(BaseModel):
@@ -251,7 +260,34 @@ async def add_custom_variant(model_id: int, body: NewVariant, request: Request) 
     with Session(s.engine) as session:
         if _model_or_404(session, model_id).status != "ready":
             raise HTTPException(409, "This model has not been read yet, so it cannot be converted.")
-    await asyncio.to_thread(add_variant, s, model_id, body.op, body.imgsz, body.simplify)
+    await asyncio.to_thread(add_variant, s, model_id, body.op, body.imgsz, simplify=body.simplify)
+    with Session(s.engine) as session:
+        return _model_out(session, _model_or_404(session, model_id), True)
+
+
+@router.post("/api/models/{model_id}/int8", status_code=201, dependencies=guarded)
+async def add_int8_variant(model_id: int, body: NewInt8, request: Request) -> ModelOut:
+    """Add an INT8 conversion, calibrated on pictures of a dataset version (at least 50, mixing capture sources).
+
+    The accuracy check is a run: put the INT8 variant and the .pt baseline in one experiment and read the drift.
+    """
+    s = services(request)
+    op = BY_NAME.get(body.op)
+    if op is None or not op.calibrated:
+        raise HTTPException(422, f"{body.op!r} is not an INT8 conversion. Choose openvino_int8 or onnx_int8.")
+    with Session(s.engine) as session:
+        model = _model_or_404(session, model_id)
+        if model.status != "ready":
+            raise HTTPException(409, "This model has not been read yet, so it cannot be converted.")
+        imgsz = body.imgsz or model.imgsz
+    if not imgsz or imgsz % 32:
+        raise HTTPException(422, "The input size must be a multiple of 32 (the detector works on a 32-pixel grid).")
+    ref = "head" if body.dataset_version is None else str(body.dataset_version)
+    try:
+        plan = await asyncio.to_thread(calibration.plan, s, body.dataset_id, ref, body.count, body.seed)
+    except calibration.CalibrationProblem as exc:
+        raise HTTPException(422, str(exc)) from None
+    await asyncio.to_thread(add_variant, s, model_id, body.op, imgsz, calibration_plan=plan)
     with Session(s.engine) as session:
         return _model_out(session, _model_or_404(session, model_id), True)
 

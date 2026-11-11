@@ -191,3 +191,20 @@ def test_pictures_without_annotations_still_show_what_the_model_found(tmp_path: 
     assert result["accuracy"] == {"available": False, "note": "n/a (no labels)"}
     assert len(result["predictions"]["pictures"]) == 4  # the speed-only dataset can still be inspected
     assert bench.run(spec(make_dataset(tmp_path / "again"), accuracy=False))["predictions"]["pictures"] == {}
+
+
+def test_repeats_each_have_their_own_warmup_window_and_samples(tmp_path: Path, oracle: Oracle) -> None:
+    result = bench.run(spec(make_dataset(tmp_path), accuracy=False, warmup=2, iterations=5, repeats=3))
+    speed = result["speed"]
+    assert speed["repeats_requested"] == 3 and len(speed["repeats"]) == 3 and speed["valid_repeats"] == 3
+    windows = [(r["t_start"], r["t_end"]) for r in speed["repeats"]]
+    assert all(a < b for a, b in windows) and all(
+        windows[i][1] <= windows[i + 1][0] for i in range(2)
+    )  # in order, apart
+    assert all(len(r["samples_ms"]["total"]) == 5 and r["stats"]["p50"] > 0 for r in speed["repeats"])
+    assert len(speed["total_ms"]) == 15 and speed["latency_valid"]
+
+
+def test_one_repeat_is_the_default(tmp_path: Path, oracle: Oracle) -> None:
+    speed = bench.run(spec(make_dataset(tmp_path), accuracy=False, warmup=1, iterations=4))["speed"]
+    assert speed["repeats_requested"] == 1 and len(speed["repeats"]) == 1

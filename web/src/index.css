@@ -129,6 +129,14 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  /* The browser draws a select's list itself and gives it the select's background. A translucent background (as the text inputs
+     have) turns into grey on grey there, so selects and their options always get solid theme colours. */
+  select,
+  select option,
+  select optgroup {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }

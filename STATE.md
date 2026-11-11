@@ -280,3 +280,87 @@ state, not as they were when that phase ended: the intermediate states were neve
 manifest are rebuilt locally. The graphify hook for Claude Code was **not** installed (the installer edits Claude Code settings and was
 blocked); run `graphify claude install` yourself if you want it. Not checked: that the graph answers well for questions outside the few tried
 (an agent claim, `evaluate.py`), and that `graphify update` on another machine gives the same communities.
+
+## Dropdown colours (2026-11-10, before Phase 4) - done, not committed
+Dropdown lists were grey on grey: a native `<select>` draws its list from its own background, and ours was translucent. Selects now have a
+solid `bg-background` and `text-foreground` (`Field.tsx`, `index.css`), and the raw `<select>` in `DatasetUpload.tsx` became `NativeSelect`.
+`e2e/dropdowns.spec.ts` reads the colours the browser will paint (select and options, both themes) and checks they are opaque, readable (4.5:1)
+and the same; it fails against the old styles (checked). Only the two dropdowns that need no data (Settings, Devices) are covered by it.
+
+## Phase 4: sweeps, repeats, telemetry, accuracy check, INT8 (2026-11-10) - done, verified on this PC only
+**What exists.** *Repeats:* a run is N timed rounds repeated R times (default 20 warm-up and 200 timed, 3 repeats; "Quick look" is 5/50/1), each
+repeat with its own warm-up; the headline is the mean of the repeats' medians with a 95% Student t interval, and a run with one repeat says it
+has no error bar (`stats.py`, `latency.py`, ADR 0004). *Comparison:* each converted run is tested against the `.pt` baseline at the same
+settings with Welch's test; "not significant" is said in the table and in the insights. *Sweeps:* the wizard varies thread counts, CPU sets
+(`0-7; 8-15`) and input sizes; `POST /api/experiments/plan` shows the run count, an estimated time (from earlier runs of that conversion on that
+device, else a 40 ms guess, and it says which) and every combination left out with its reason (more threads than CPUs, a CPU that does not exist,
+no finished conversion at that size, the `.pt` only at its own size). Cancel keeps finished runs; **Resume** remakes only cancelled and lost
+runs (refused while any run is still going or stopping). *Telemetry:* `telemetry.py` runs as its own process at 5 Hz (per-core CPU, RSS of the
+benchmark tree, clock, temperature, throttle flag where there is one, GPU through NVML); what cannot be read is `null` and shown as "not available".
+The environment (power plan or governor, cores) is recorded. A repeat is invalid when a throttle flag was up or its clock averaged more than 10%
+below where the run started; invalid repeats are left out of the numbers, a run with none left is "invalid for latency" and out of speed rankings.
+*Accuracy check:* every converted run is compared with the `.pt` baseline of the same model: mAP and per-class AP deltas, mean box agreement
+(each baseline detection against the variant's best box; a miss counts 0), class flips; pass/fail uses limits set in Settings (default: mAP50 may
+drop 5 points, agreement at least 0.80); a variant that finds nothing always fails. *INT8:* OpenVINO NNCF and ONNX static QDQ (detect head found
+as the highest `/model.N/` and left in float), added from the model page, calibrated on at least 50 *different* pictures of a dataset version
+(`calibration.py`; the list is stored, so a variant knows which pictures); never made by "convert everything".
+
+**Measured on this PC (yolo11n, COCO128, 128 pictures, 4 threads, 3 repeats, real agent, throw-away server):**
+| Variant | Median per image (95% interval) | vs `.pt` | mAP50 | Box agreement | Accuracy check |
+|---|---|---|---|---|---|
+| PyTorch `.pt` | 55.9 +/- 1.3 ms | | 0.676 | | baseline |
+| ONNX FP32 | 30.0 +/- 3.8 ms | 1.86x, real | 0.676 | 1.000 | pass |
+| OpenVINO FP32 | 27.4 +/- 2.0 ms | 2.04x, real | 0.676 | 1.000 | pass |
+| OpenVINO INT8 (128 pictures) | 17.0 +/- 0.7 ms | 3.28x, real | 0.641 (-3.5 pts) | 0.825 | pass (5 pts / 0.80) |
+| ONNX INT8 (128 pictures) | 25.0 +/- 0.4 ms | 2.23x, real | 0.610 (-6.6 pts) | 0.738 | **fail** |
+The default limits were chosen from this table: they keep OpenVINO INT8 (kept in Phase 0) and fail ONNX INT8 (experimental in Phase 0). That is one
+model on one dataset; the owner should set them for their own data.
+- *Calibration regression* (the repo's old recipe): OpenVINO INT8 calibrated on one picture repeated 50 times: mAP50 0.620 (-5.6 pts), agreement
+  0.709, **fails**; on 128 different pictures: 0.641 (-3.5), 0.825. Fewer than 50 different pictures, or copies of one, are refused by the server
+  and by the converter (tests for both).
+- *24-run sweep* (6 conversions x 1, 2, 4, 8 threads, 2 repeats, no accuracy pass): 80 s against an estimated 119 s. Cancelled after 8 runs, resumed:
+  the 8 finished runs were untouched (same finish times), 23 of 24 combinations done and **one cancelled** because the run that was still
+  stopping when I resumed was not replaced. That was a real edge; resume now refuses while a run is going or stopping (test added, the sweep not
+  rerun). Median per image at 1, 2, 4, 8 threads: ONNX FP32 72.5, 42.2, 27.6, 21.9 ms; OpenVINO INT8 37.6, 23.3, 16.5, 13.2 ms; ONNX INT8 50.4,
+  32.3, 25.3, 25.5 ms (no gain from 4 to 8 threads).
+- *Telemetry cost.* Interleaved and rotated, three rounds of five repeats with 25 s of cooling between runs, OpenVINO FP32 at 4 threads: no sampler
+  27.0 +/- 0.4 ms, full sampler 26.3 +/- 0.5 ms, without temperature 26.7 +/- 0.3, without clock and temperature 27.1 +/- 0.4. No slowdown is
+  measurable; the 0.7 ms gap is in the *faster* direction and is the size of the drift between rounds, which the intervals do not include.
+  An earlier, un-rotated attempt (telemetry on straight after the 24-run sweep) gave 37 to 65 ms per repeat with the clock 20 to 30% below
+  start and 8 of 10 repeats marked invalid: the machine was hot (the ACPI zone read 90 to 97 degrees C), the telemetry-off runs could not flag it, and the marking
+  worked as designed. **Lesson for results on this laptop: it throttles after a few minutes of load; repeats and the clock rule exist because of it.**
+- Verified counts: server 248 tests, agent 58, browser 146 on the built app and 58 on the Vite dev server (the Phase 4 spec has 11 tests: plan and
+  pruning, nothing-can-run, quick/full, intervals and "not significant", the zero-detection model failing the check, limits in Settings kept
+  and reset, a throttled run, repeats and machine on the run page, cancel and resume, INT8 refused with too few pictures, axe in both themes),
+  ruff, mypy strict, ESLint, Prettier, tsc. The real-converter test now also converts both INT8 files from COCO128 pictures.
+- The statistics module was checked against scipy 1.18.1 (Welch t, p and df identical to six places, t quantiles to 1e-12).
+
+**Not checked, and limits to know.**
+- **Anything on a Raspberry Pi** (`vcgencmd get_throttled` is in the code and untested; ARM INT8 speed unknown). Linux and macOS agents untested.
+- **Windows has no throttle flag** without administrator rights, so only the clock-drop rule marks a repeat there; the temperature is the ACPI
+  thermal zone (the chassis), not the CPU die. GPU readings come from NVML and were not validated against another tool.
+- **Batch-size sweeps are not built** (every conversion is batch 1; the brief asked for 1, 4, 8) and **TensorRT** still is not.
+- The time estimate does not model threads (the same figure for 1 and 8 threads), so a one-thread sweep runs longer than it says.
+- The accuracy-check limits come from one model and one dataset. Per-class drift is in the API (`drift.per_class_ap50_delta`) but not shown yet.
+- The 24-run sweep and the overhead tests ran on a throw-away server (port 8011, data in `%TEMP%\eb_e2e`); the live app was not used and **has not
+  been restarted**: migration 0005 (`experiments.plan`) applies the next time it starts, and it needs the new web build (`npm run build`).
+  Experiments made before this have no saved plan, so they cannot be resumed.
+- An INT8 file is checked against PyTorch only by shape and finiteness at conversion time ("Accuracy: check it in an experiment" in the grid).
+- No independent code or security review of the new endpoints (`/int8`, `/plan`, `/resume`) or the calibration extraction. The Docker image was
+  not rebuilt (the server has new modules and Pillow since Phase 3).
+- The calibration pictures come from the normalised dataset zip, so INT8 sees the same pictures the benchmark sees: calibrating and judging on
+  the same dataset flatters the result. Use a separate dataset (or version) for calibration when it matters.
+
+## Results columns (2026-11-10, after Phase 4)
+The Results page showed two "Best" columns; it now shows the first **three** metrics of "Metrics you judge by", in that order (fewer if fewer are
+chosen). The experiment page still shows all chosen metrics. The choice is kept in the browser's `localStorage` **per address**: `localhost:8000`
+and `127.0.0.1:8000` are different places and do not share it. Test: `e2e/phase4.spec.ts` (headers follow Settings, only three, kept on reload).
+
+## Picture inspector fixes (2026-11-11)
+- Each run's caption in the picture inspector now names its **threads** (and pinned CPUs) and its run number, so the runs of a thread sweep are no
+  longer all "v_0.0.0.2_, ONNX FP32". `GET /api/experiments/{id}/inspect` returns `threads` and `cpu_list` per run.
+- A box label **wraps** (up to 7.5 rem wide) instead of being cut with an ellipsis; it sits above its box, inside the box when the box touches the
+  top, and grows leftwards from boxes on the right half, so it stays inside the picture. Test: `e2e/phase4.spec.ts` (captions, wrapping, label
+  inside the picture). `e2e/websocket.spec.ts` "reconnects after the server closes it" failed once in a full run and passed three times alone: a
+  timing flake, not investigated.
+- Not checked: labels on boxes that fill the whole picture, and labels longer than three lines.

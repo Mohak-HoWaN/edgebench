@@ -8,7 +8,9 @@ export interface Verify {
   ok: boolean;
   max_abs_diff?: number;
   relative?: number;
-  tolerance?: number;
+  /** null for INT8: it is judged by the accuracy check of an experiment, not by a tolerance. */
+  tolerance?: number | null;
+  note?: string;
   /** Set when the comparison with PyTorch could not be made (its output had another shape, or the check crashed). */
   error?: string;
 }
@@ -20,7 +22,7 @@ export interface Variant {
   precision: string;
   /** The input size this conversion was built for. */
   imgsz: number;
-  /** Settings that change the output (the ONNX export's `simplify`). */
+  /** Settings that change the output: the ONNX export's `simplify`, or an INT8 conversion's `calibration`. */
   settings: Record<string, unknown>;
   state: VariantState;
   mismatch: boolean;
@@ -212,6 +214,16 @@ export const useRetry = () =>
   useModelAction((id: number) => send("POST", `/api/variants/${String(id)}/retry`));
 export const useCancel = () =>
   useModelAction((id: number) => send("POST", `/api/variants/${String(id)}/cancel`));
+
+export const useAddInt8 = () =>
+  useModelAction((a: { id: number; op: string; dataset_id: number; count: number }) =>
+    send<ModelInfo>("POST", `/api/models/${String(a.id)}/int8`, {
+      op: a.op,
+      dataset_id: a.dataset_id,
+      count: a.count,
+      seed: 0,
+    }),
+  );
 
 export const useAddVariant = () =>
   useModelAction((a: { id: number; op: string; imgsz: number; simplify: boolean }) =>

@@ -14,10 +14,20 @@ import {
   useCancelExperiment,
   useExperiment,
   useRemoveExperiment,
+  useResumeExperiment,
+  type Comparison,
+  type Drift,
   type ExperimentInfo,
 } from "@/lib/experiments";
-import { experimentInsights } from "@/lib/insights";
-import { bestByMetric, METRICS, priorityMetrics, rankRuns, usePriority } from "@/lib/metrics";
+import { configKey, experimentInsights } from "@/lib/insights";
+import {
+  bestByMetric,
+  METRICS,
+  priorityMetrics,
+  rankRuns,
+  throttled,
+  usePriority,
+} from "@/lib/metrics";
 import { STATUS_TEXT, type RunInfo } from "@/lib/runs";
 import { cn } from "@/lib/utils";
 
@@ -49,17 +59,67 @@ function MetricChooser() {
   );
 }
 
-/** How many times a variant had been run before this run, so a repeat can be told apart (0 for the first). */
+/** How many times a measurement (variant, threads, CPUs) had been run before this run (0 for the first). A sweep is not a repeat. */
 function repeatNumbers(runs: RunInfo[]): Map<number, number> {
   const seen = new Map<string, number>();
   const out = new Map<number, number>();
   for (const r of [...runs].sort((a, b) => a.id - b.id)) {
-    const key = `${String(r.model_id)}|${String(r.variant_id)}`;
+    const key = configKey(r);
     const n = seen.get(key) ?? 0;
     out.set(r.id, n);
     seen.set(key, n + 1);
   }
   return out;
+}
+
+/** The settings that differ between runs, so a sweep's rows can be told apart. */
+function settingsNote(r: RunInfo): string {
+  const p = r.params;
+  if (!p) return "";
+  const cpus = p.cpu_list?.length ? `, CPUs ${p.cpu_list.join(",")}` : "";
+  return `${String(p.threads)} thread${p.threads === 1 ? "" : "s"}${cpus}`;
+}
+
+/** Speed against the PyTorch baseline at the same settings, and whether the accuracy check passed. */
+function AgainstBaseline({ c, d }: { c?: Comparison; d?: Drift }) {
+  return (
+    <div className="space-y-1 text-xs">
+      {c?.speedup ? (
+        <p>
+          {c.speedup >= 1
+            ? `${c.speedup.toFixed(2)}x faster`
+            : `${(1 / c.speedup).toFixed(2)}x slower`}
+          {c.significant === true ? (
+            <span className="text-muted-foreground"> (a real difference)</span>
+          ) : c.significant === false ? (
+            <span className="text-warn"> (not significant: could be noise)</span>
+          ) : (
+            <span className="text-muted-foreground"> (no test: {c.note ?? "too few repeats"})</span>
+          )}
+        </p>
+      ) : null}
+      {d ? (
+        <>
+          <p className={d.verdict.passed ? "text-ok" : "font-medium text-destructive"}>
+            {d.verdict.passed ? "Passes the accuracy check" : "Fails the accuracy check"}
+          </p>
+          <p className="text-muted-foreground">
+            {d.mean_box_iou !== undefined && d.mean_box_iou !== null
+              ? `boxes agree ${(d.mean_box_iou * 100).toFixed(0)}%`
+              : "boxes: not compared"}
+            {d.map50_delta !== null
+              ? `; mAP50 ${d.map50_delta >= 0 ? "+" : "-"}${Math.abs(d.map50_delta * 100).toFixed(1)} points`
+              : ""}
+          </p>
+          {d.verdict.reasons.map((reason) => (
+            <p key={reason} className="text-destructive">
+              {reason}
+            </p>
+          ))}
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function RunsTable({ e }: { e: ExperimentInfo }) {
@@ -74,6 +134,8 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
   const best = bestByMetric(done, metrics);
   const repeats = repeatNumbers(runs);
   const first = metrics[0];
+  const showSettings = new Set(runs.map((r) => settingsNote(r))).size > 1;
+  const showAgainst = Object.keys(e.drift).length > 0 || Object.keys(e.comparisons).length > 0;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
@@ -105,6 +167,19 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
                     ) : null}
                   </th>
                 ))}
+                {showAgainst ? (
+                  <th scope="col" className="py-2 pr-3 font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Against the .pt
+                      <Info>
+                        Speed compared with the PyTorch baseline run at the same settings, using a
+                        Welch test on the repeats (a speed-up that could be noise says so). The
+                        accuracy check compares the boxes and the mAP with the baseline's, using the
+                        limits in Settings.
+                      </Info>
+                    </span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -120,6 +195,11 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
                         {r.model_name ?? "removed model"}
                       </Link>
                       <span className="block text-xs text-muted-foreground">{r.variant_label}</span>
+                      {showSettings ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {settingsNote(r)}
+                        </span>
+                      ) : null}
                       {again > 0 ? (
                         <span className="mt-0.5 inline-block rounded border border-primary/40 px-1.5 text-xs text-primary">
                           run again #{again + 1}
@@ -143,12 +223,26 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
                           )}
                         >
                           {v === undefined ? (
-                            <span className="text-muted-foreground">
-                              {r.status === "done" ? "n/a" : ""}
+                            <span
+                              className={cn(
+                                "text-muted-foreground",
+                                m.group === "speed" && throttled(r) && "text-warn",
+                              )}
+                            >
+                              {r.status !== "done"
+                                ? ""
+                                : m.group === "speed" && throttled(r)
+                                  ? "throttled"
+                                  : "n/a"}
                             </span>
                           ) : (
                             <>
                               {m.format(v)}
+                              {m.detail?.(r) ? (
+                                <span className="block text-xs font-normal text-muted-foreground">
+                                  {m.detail(r)}
+                                </span>
+                              ) : null}
                               {isBest ? (
                                 <span className="block text-xs font-normal text-ok">best</span>
                               ) : null}
@@ -157,6 +251,14 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
                         </td>
                       );
                     })}
+                    {showAgainst ? (
+                      <td className="py-2 pr-3">
+                        <AgainstBaseline
+                          c={e.comparisons[String(r.id)]}
+                          d={e.drift[String(r.id)]}
+                        />
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -164,7 +266,9 @@ function RunsTable({ e }: { e: ExperimentInfo }) {
           </table>
         </div>
       </div>
-      <Insights items={experimentInsights(runs, metrics)} />
+      <Insights
+        items={experimentInsights(runs, metrics, { drift: e.drift, comparisons: e.comparisons })}
+      />
     </div>
   );
 }
@@ -197,7 +301,8 @@ function Parameters({ e }: { e: ExperimentInfo }) {
           </dd>
           <dt className="text-muted-foreground">Rounds</dt>
           <dd className="tabular-nums">
-            {p.warmup} warm-up, {p.iterations} timed
+            {p.warmup} warm-up and {p.iterations} timed, in {p.repeats ?? 1} repeat
+            {(p.repeats ?? 1) === 1 ? "" : "s"}
           </dd>
           <dt className="text-muted-foreground">Detection</dt>
           <dd className="tabular-nums">
@@ -213,6 +318,7 @@ export default function ExperimentDetail() {
   const id = Number(useParams().id);
   const experiment = useExperiment(id);
   const cancel = useCancelExperiment();
+  const resume = useResumeExperiment();
   const remove = useRemoveExperiment();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -293,6 +399,25 @@ export default function ExperimentDetail() {
             }}
           >
             Cancel what is left
+          </Button>
+        ) : null}
+        {e.resumable ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={resume.isPending}
+            onClick={() => {
+              resume.mutate(e.id, {
+                onSuccess: () => {
+                  toast.success("The runs that were not finished are queued again");
+                },
+                onError: (err) => {
+                  toast.error(err.message);
+                },
+              });
+            }}
+          >
+            Resume: make what is missing
           </Button>
         ) : null}
         <Button

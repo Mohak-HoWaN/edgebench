@@ -20,6 +20,8 @@ from . import __version__
 from .cache import Cache
 from .client import Cancelled, Rejected, ServerClient
 from .fingerprint import collect
+from .repeats import merge_telemetry
+from .telemetry import environment, read_file
 
 log = logging.getLogger("edgebench_agent")
 HEARTBEAT_SECONDS = 5.0
@@ -130,6 +132,7 @@ class Agent:
             "model_names": job["model_names"],
             "dataset_names_generic": job["dataset"]["names_generic"],
             **{k: params[k] for k in ("threads", "conf", "iou", "max_det", "warmup", "iterations", "accuracy")},
+            "repeats": params.get("repeats", 1),
             "max_images": params.get("max_images"),
             "cpu_list": params.get("cpu_list"),
         }
@@ -137,12 +140,12 @@ class Agent:
         work.mkdir(parents=True, exist_ok=True)
         spec_path = work / "spec.json"
         spec_path.write_text(json.dumps(spec), encoding="utf-8")
-        outcome = self._run_child(spec_path)
+        outcome = self._run_child(spec_path, bool(params.get("telemetry", True)))
         if outcome is None:
             raise Cancelled
         self._report(job_id, **outcome)
 
-    def _run_child(self, spec_path: Path) -> dict[str, Any] | None:
+    def _run_child(self, spec_path: Path, telemetry: bool = True) -> dict[str, Any] | None:
         env = {**os.environ, "YOLO_AUTOINSTALL": "False", "PYTHONUNBUFFERED": "1"}
         proc = subprocess.Popen(
             [self.python, "-m", self.bench_module, str(spec_path)],
@@ -155,6 +158,8 @@ class Agent:
         )
         lines: list[str] = []
         final: dict[str, Any] | None = None
+        samples_path = spec_path.with_name("telemetry.ndjson")
+        sampler = self._start_sampler(proc.pid, samples_path) if telemetry else None
 
         def read() -> None:
             nonlocal final
@@ -176,9 +181,11 @@ class Agent:
                 kill_tree(proc.pid)
                 proc.wait()
                 reader.join(timeout=5)
+                self._stop_sampler(sampler)
                 return None
             time.sleep(0.1)
         reader.join(timeout=10)
+        self._stop_sampler(sampler)
         log_text = "\n".join(lines)[-6000:]
         if final is None:
             code = proc.returncode
@@ -190,7 +197,29 @@ class Agent:
             }
         ok = bool(final.pop("ok", False))
         kind, error = str(final.pop("kind", "failed")), final.pop("error", None)
+        if ok:
+            header, samples = read_file(samples_path)
+            final = merge_telemetry(final, header, samples, environment())
         return {"ok": ok, "kind": kind, "error": error, "result": final if ok else None, "log": log_text or None}
+
+    def _start_sampler(self, pid: int, out: Path) -> subprocess.Popen[bytes] | None:
+        """The telemetry sampler is its own process, so reading sensors never runs inside the benchmark."""
+        try:
+            return subprocess.Popen(
+                [self.python, "-m", "edgebench_agent.telemetry", "--pid", str(pid), "--out", str(out), "--hz", "5"],
+                cwd=PACKAGE_PARENT,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            log.warning("could not start the telemetry sampler; the run goes ahead without it")
+            return None
+
+    @staticmethod
+    def _stop_sampler(sampler: subprocess.Popen[bytes] | None) -> None:
+        if sampler is not None and sampler.poll() is None:
+            sampler.kill()
+            sampler.wait(timeout=5)
 
     # --- the loop --------------------------------------------------------------------------------------------------
 

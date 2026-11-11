@@ -24,3 +24,13 @@ its mean, p50, p95, p99 and standard deviation of per-iteration latency.
 ## Consequences
 - Every number in the report traces to stored repeats, so it can be recomputed.
 - With 3 repeats many differences will be "not significant"; that is an honest result, not a bug.
+
+## Revisited after Phase 4 (2026-11-10)
+No decision changed. What the first real data showed (yolo11n on a hybrid-core laptop, 4 threads, COCO128):
+- Three repeats gave an interval of +/-13% of the median for ONNX FP32 (30.0 +/- 3.8 ms) and +/-2 to 7% for the others; five repeats of a
+  quieter configuration gave +/-1.5 to 3%. The page now says "wide" below five repeats and offers "Full measurement" (3) and any number.
+- The Welch test separated every converted run from the `.pt` baseline (the speed-ups were 1.9 to 3.3x) and would have called a 1 ms difference
+  inside a 4 ms interval "not significant", as intended (tests use that case).
+- The clock-drop rule (more than 10% below the first second of the first repeat) marked 8 of 10 repeats of a run made on a hot machine, whose medians
+  were 37 to 65 ms against 26 ms cool. Without telemetry nothing can mark them, so a latency measured with telemetry off is not protected.
+- Windows exposes no throttle flag without administrator rights, so the clock rule is the only signal there.

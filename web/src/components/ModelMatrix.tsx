@@ -9,6 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { LogDialog } from "@/components/LogDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -75,7 +76,16 @@ function Cell({ variant, onLog }: { variant: Variant; onLog: () => void }) {
               <AlertTriangle aria-hidden />
               {check.error}
             </p>
-          ) : check?.relative !== undefined && check.tolerance !== undefined ? (
+          ) : variant.precision === "INT8" ? (
+            <p
+              className="text-xs text-muted-foreground"
+              title="INT8 changes the numbers by design. Whether it still finds the objects is what the accuracy check in an experiment with the PyTorch baseline tells you."
+            >
+              Accuracy: check it in an experiment
+            </p>
+          ) : check?.relative !== undefined &&
+            check.tolerance !== undefined &&
+            check.tolerance !== null ? (
             // A pass is one quiet phrase (the numbers are on hover); only a cell that does not match gets the figures.
             variant.mismatch ? (
               <p className="flex items-center gap-1 text-xs tabular-nums text-warn [&_svg]:size-3.5">
@@ -165,11 +175,83 @@ function groupKey(v: Variant): string {
   return `${String(v.imgsz)}|${v.settings.simplify === false ? "plain" : "default"}`;
 }
 
+interface CalibrationInfo {
+  count: number;
+  version: number;
+  seed: number;
+  dataset_id: number;
+}
+
+/** INT8 conversions, one row each: they differ by the pictures they were calibrated on, so they do not fit the grid. */
+function Int8Table({ cells, onLog }: { cells: Variant[]; onLog: (id: number) => void }) {
+  return (
+    <table className="mb-6 w-full max-w-4xl border-collapse text-left">
+      <caption className="pb-2 text-left text-sm font-medium">INT8 conversions</caption>
+      <thead>
+        <tr className="border-b text-sm">
+          <th scope="col" className="w-36 py-2 pr-4 font-medium">
+            Format
+          </th>
+          <th scope="col" className="py-2 pr-4 font-medium">
+            Calibrated on
+          </th>
+          <th scope="col" className="py-2 pr-4 font-medium">
+            Status
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {cells.map((v) => {
+          const c = v.settings.calibration as CalibrationInfo | undefined;
+          return (
+            <tr key={v.id} className="border-b align-top">
+              <th scope="row" className="py-3 pr-4 text-sm font-medium">
+                {v.format} {v.precision}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {String(v.imgsz)} px
+                </span>
+              </th>
+              <td className="py-3 pr-4 text-sm">
+                {c ? (
+                  <>
+                    {String(c.count)} pictures, dataset{" "}
+                    <Link
+                      to={`/datasets/${String(c.dataset_id)}?v=${String(c.version)}`}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      #{String(c.dataset_id)} version {String(c.version)}
+                    </Link>
+                    <span className="block text-xs text-muted-foreground">
+                      seed {String(c.seed)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">not recorded</span>
+                )}
+              </td>
+              <td className="py-3 pr-4">
+                <Cell
+                  variant={v}
+                  onLog={() => {
+                    onLog(v.id);
+                  }}
+                />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 /** One grid per input size (and export setting): a row per format, a column per precision. A missing combination shows a dash. */
 export function ModelMatrix({ model }: { model: ModelInfo }) {
   const [logId, setLogId] = useState<number | null>(null);
-  const variants = model.variants ?? [];
-  const logFor = variants.find((v) => v.id === logId) ?? null; // looked up each render, so "live" follows the cell
+  const all = model.variants ?? [];
+  const int8 = all.filter((v) => v.precision === "INT8");
+  const variants = all.filter((v) => v.precision !== "INT8");
+  const logFor = all.find((v) => v.id === logId) ?? null; // looked up each render, so "live" follows the cell
   const groups = new Map<string, Variant[]>();
   for (const v of variants) groups.set(groupKey(v), [...(groups.get(groupKey(v)) ?? []), v]);
   const ordered = [...groups.entries()].sort(([a], [b]) => {
@@ -178,6 +260,7 @@ export function ModelMatrix({ model }: { model: ModelInfo }) {
   });
   return (
     <>
+      {int8.length > 0 ? <Int8Table cells={int8} onLog={setLogId} /> : null}
       {ordered.map(([key, cells]) => {
         const first = cells[0];
         const heading = first

@@ -70,6 +70,8 @@ export const NAV: NavItem[] = [
       { id: "exp-models", label: "Models and variants" },
       { id: "exp-dataset-device", label: "Dataset and device" },
       { id: "exp-settings", label: "Settings" },
+      { id: "exp-sweep", label: "Try several settings" },
+      { id: "exp-plan", label: "What this will run" },
     ],
   },
   { to: "/live", label: "Live run", icon: Radio, chord: "l", group: "experiments" },
@@ -84,6 +86,7 @@ export const NAV: NavItem[] = [
     sections: [
       { id: "appearance", label: "Appearance" },
       { id: "metrics", label: "Metrics you judge by" },
+      { id: "accuracy-check", label: "Accuracy check" },
       { id: "shortcuts", label: "Keyboard shortcuts" },
       { id: "about", label: "About this server" },
       { id: "interface-data", label: "Interface data" },

@@ -151,6 +151,8 @@ class Experiment(SQLModel, table=True):
     dataset_version_id: int | None = Field(default=None, foreign_key="dataset_versions.id")
     device_id: int | None = Field(default=None, foreign_key="devices.id")
     params: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    # What was asked for (the items and the sweep), kept so a cancelled sweep can be resumed without repeating runs.
+    plan: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class Run(SQLModel, table=True):
