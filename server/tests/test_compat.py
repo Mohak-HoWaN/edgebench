@@ -189,3 +189,15 @@ def test_the_converter_environment_is_found_next_to_the_repository_in_the_script
     own.mkdir(parents=True)
     (own / "python").write_text("")
     assert find_converter_python(tmp_path) == own / "python"  # the dedicated environment wins
+
+
+def test_a_run_says_its_format_precision_size_and_input_size(client: TestClient, tmp_path: Path) -> None:
+    device_id, _ = enrolled(client)
+    model_id, variant_id = seed_model(client, tmp_path)
+    variant, baseline = start_run(client, tmp_path, device_id), start_run(client, tmp_path, device_id, baseline=True)
+    got = client.get(f"/api/runs/{variant['id']}").json()
+    assert (got["format"], got["precision"], got["imgsz"]) == ("ONNX", "FP32", 640) and got["size_bytes"] > 0
+    base = client.get(f"/api/runs/{baseline['id']}").json()
+    assert (base["format"], base["precision"]) == ("PyTorch", "FP32")
+    assert base["size_bytes"] == client.get(f"/api/models/{model_id}").json()["size_bytes"]  # the .pt itself
+    assert model_id and variant_id

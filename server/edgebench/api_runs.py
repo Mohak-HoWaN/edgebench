@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
-from . import compat, latency, queue
+from . import compat, failures, latency, queue
 from .api_models import services
+from .dataset_import import read_manifest
 from .dataset_versions import find_version
 from .models import Dataset, DatasetVersion, Device, Job, MlModel, Run, Variant
 from .security import same_origin
@@ -55,6 +58,10 @@ class RunOut(BaseModel):
     variant_id: int | None
     variant_label: str
     runtime: str
+    format: str  # ONNX, OpenVINO, ncnn, TorchScript, or PyTorch for the baseline
+    precision: str
+    size_bytes: int | None  # the converted file(s), or the .pt itself for the baseline
+    imgsz: int | None
     dataset_id: int | None
     dataset_name: str | None
     dataset_version: int | None
@@ -143,6 +150,10 @@ def run_out(s: Services, session: Session, run: Run) -> RunOut:
         variant_id=run.variant_id,
         variant_label=variant_label(variant, model),
         runtime=runtime_for(variant),
+        format=variant.format if variant else "PyTorch",
+        precision=variant.precision if variant else "FP32",
+        size_bytes=variant.size_bytes if variant else (model.size_bytes if model else None),
+        imgsz=variant.imgsz if variant else (model.imgsz if model else None),
         dataset_id=run.dataset_id,
         dataset_name=dataset.name if dataset else None,
         dataset_version=version.number if version else None,
@@ -305,6 +316,62 @@ def get_run(run_id: int, request: Request) -> RunOut:
     s = services(request)
     with Session(s.engine) as session:
         return run_out(s, session, _run_or_404(session, run_id))
+
+
+@lru_cache(maxsize=4)
+def _manifest(path: str) -> dict[str, Any]:
+    return read_manifest(Path(path))
+
+
+def _failure_inputs(request: Request, run_id: int, limit: int) -> tuple[dict[str, Any], Path, list[str]]:
+    """What a failure list needs: the analysis, the dataset version's zip, and the dataset's class names."""
+    s = services(request)
+    with Session(s.engine) as session:
+        run = _run_or_404(session, run_id)
+        model = session.get(MlModel, run.model_id) if run.model_id else None
+        version = session.get(DatasetVersion, run.dataset_version_id) if run.dataset_version_id else None
+        sha = (run.result or {}).get("predictions_sha")
+        if run.outcome != "done" or not sha or not s.store.exists(sha):
+            raise HTTPException(
+                409, "This run kept no per-picture detections, so there is nothing to list. Run it again."
+            )
+        if (
+            model is None
+            or version is None
+            or not version.artifact_sha256
+            or not s.store.exists(version.artifact_sha256)
+        ):
+            raise HTTPException(409, "The model or the dataset version of this run is no longer available.")
+        zip_path = s.store.path(version.artifact_sha256)
+        model_names = list(model.class_names or [])
+    manifest = _manifest(str(zip_path))
+    names = list(manifest["names"])
+    pictures = failures.predictions(str(s.store.path(sha))).get("pictures", {})
+    return failures.analyse(manifest["images"], names, pictures, model_names, limit), zip_path, names
+
+
+@router.get("/api/runs/{run_id}/failures")
+def run_failures(run_id: int, request: Request, limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
+    """The pictures this run got wrong (missed, wrongly named, made up), worst first, with the real and found boxes."""
+    return _failure_inputs(request, run_id, limit)[0]
+
+
+@router.get("/api/runs/{run_id}/failures.zip")
+def run_failures_zip(run_id: int, request: Request, images: str = Query(min_length=1, max_length=8000)) -> Response:
+    """The chosen pictures (by index, from the failure list) as a folder for the next annotation round."""
+    try:
+        wanted = {int(x) for x in images.split(",") if x}
+    except ValueError:
+        raise HTTPException(422, "The pictures must be numbers separated by commas.") from None
+    result, zip_path, names = _failure_inputs(request, run_id, 1000)
+    picked = [p for p in result["pictures"] if p["index"] in wanted]
+    if not picked:
+        raise HTTPException(404, "None of those pictures is in this run's list of mistakes.")
+    return Response(
+        failures.export(zip_path, picked, names),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="mistakes-run-{run_id}.zip"'},
+    )
 
 
 @router.post("/api/runs", status_code=201, dependencies=guarded)

@@ -8,6 +8,7 @@ precision / recall / F1 read at the confidence that maximises smoothed mean F1),
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -78,6 +79,10 @@ class Metrics:
     confidence_at_best_f1: float
     per_class: dict[int, dict[str, float]]  # class index -> {ap50, ap50_95, images_with_truth, instances, predictions}
     mean_iou: float = 0.0  # average overlap of the boxes that were matched to a real object (at confidence 0.25)
+    # Precision, recall and F1 at 51 confidence cut-offs (overall and per class index), for the curve charts
+    curves: dict[str, Any] = field(default_factory=dict)
+    # How many detections fell in each of 20 equal confidence bins from 0 to 1, for the score-distribution chart
+    score_hist: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -180,6 +185,19 @@ class Accumulator:
                 ap[ci, j] = compute_ap(recall[:, j], precision[:, j])
         f1_curve = 2 * p_curve * r_curve / (p_curve + r_curve + EPS)
         best = int(_smooth(f1_curve.mean(0), 0.1).argmax())
+        grid = [*range(0, 1000, 20), 999]
+
+        def thin(curve: NDArray[np.float64]) -> list[float]:
+            return [round(float(curve[i]), 4) for i in grid]
+
+        curves = {
+            "conf": [round(float(px[i]), 3) for i in grid],
+            "all": {"precision": thin(p_curve.mean(0)), "recall": thin(r_curve.mean(0)), "f1": thin(f1_curve.mean(0))},
+            "per_class": {
+                int(c): {"precision": thin(p_curve[i]), "recall": thin(r_curve[i]), "f1": thin(f1_curve[i])}
+                for i, c in enumerate(classes)
+            },
+        }
         per_class = {
             int(c): {
                 "ap50": float(ap[i, 0]),
@@ -199,4 +217,6 @@ class Accumulator:
             confidence_at_best_f1=float(px[best]),
             per_class=per_class,
             mean_iou=self.iou_sum / self.iou_count if self.iou_count else 0.0,
+            curves=curves,
+            score_hist=[int(n) for n in np.histogram(conf, bins=20, range=(0.0, 1.0))[0]],
         )

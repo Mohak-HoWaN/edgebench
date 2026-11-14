@@ -93,3 +93,18 @@ def test_a_picture_with_nothing_in_it_and_no_detections_is_fine() -> None:
     acc.add(dets((10, 10, 50, 50, 0.9, 0)), boxes((10, 10, 50, 50)), np.array([0]))
     m = acc.finish()
     assert m is not None and m.map50 == pytest.approx(1.0, abs=0.01)
+
+
+def test_the_curves_and_the_score_histogram_are_recorded_thin_enough_to_store() -> None:
+    acc = Accumulator(2)
+    perfect_image(acc)
+    perfect_image(acc)
+    acc.add(dets((0, 0, 10, 10, 0.2, 0)), boxes(), np.zeros(0, dtype=np.int64))  # a made-up detection with a low score
+    m = acc.finish()
+    assert m is not None
+    assert len(m.curves["conf"]) == 51 and m.curves["conf"][0] == 0.0 and m.curves["conf"][-1] == 1.0
+    assert set(m.curves["all"]) == {"precision", "recall", "f1"} and all(len(v) == 51 for v in m.curves["all"].values())
+    assert set(m.curves["per_class"]) == {0, 1} and len(m.curves["per_class"][0]["recall"]) == 51
+    assert m.curves["all"]["recall"][0] == pytest.approx(1.0, abs=0.01)  # nothing is cut off at confidence 0
+    assert len(m.score_hist) == 20 and sum(m.score_hist) == 5  # four confident detections and the made-up one
+    assert m.score_hist[4] == 1  # the 0.2 detection sits in the 0.20 to 0.25 bin

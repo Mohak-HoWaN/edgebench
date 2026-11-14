@@ -208,3 +208,11 @@ def test_repeats_each_have_their_own_warmup_window_and_samples(tmp_path: Path, o
 def test_one_repeat_is_the_default(tmp_path: Path, oracle: Oracle) -> None:
     speed = bench.run(spec(make_dataset(tmp_path), accuracy=False, warmup=1, iterations=4))["speed"]
     assert speed["repeats_requested"] == 1 and len(speed["repeats"]) == 1
+
+
+def test_accuracy_is_also_given_per_capture_source_and_with_curves(tmp_path: Path, oracle: Oracle) -> None:
+    acc = bench.run(spec(make_dataset(tmp_path)))["accuracy"]
+    assert set(acc["by_source"]) == {"other"} and acc["by_source"]["other"]["images"] == 4
+    assert acc["by_source"]["other"]["map50_95"] == pytest.approx(acc["map50_95"], abs=0.001)
+    assert set(acc["curves"]["per_class"]) == {"chips", "biscuit"} and len(acc["curves"]["conf"]) == 51
+    assert len(acc["score_hist"]) == 20

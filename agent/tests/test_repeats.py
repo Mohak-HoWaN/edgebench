@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from edgebench_agent.repeats import finalize, invalid_repeats, merge_telemetry
+from edgebench_agent.repeats import finalize, invalid_repeats, merge_telemetry, series
 
 
 def repeat(index: int, level: float, t0: float) -> dict[str, Any]:
@@ -105,3 +105,23 @@ def test_a_flagged_window_is_reported_as_throttled(bad: bool) -> None:
     result: dict[str, Any] = {"speed": speed_of(10.0)}
     out = merge_telemetry(result, {}, [sample(t, 3000.0, throttled=bad) for t in range(0, 10)], {})
     assert out["speed"]["latency_valid"] is False and out["telemetry"]["run"]["throttled"] is True
+
+
+def test_the_telemetry_series_is_thinned_and_measured_from_the_first_repeat() -> None:
+    samples = [
+        {"t": 99.0 + i * 0.2, "temp_c": 50.0 + i, "clock_mhz": 3000.0, "cpu": 10.0, "throttled": False}
+        for i in range(400)
+    ]
+    reps = [{"t_start": 100.0, "t_end": 130.0, "valid": True}, {"t_start": 140.0, "t_end": 170.0, "valid": False}]
+    out = series(samples, reps, limit=50)
+    assert len(out["t"]) <= 50 and out["t"][0] == pytest.approx(-1.0)  # a second of lead-in before the first repeat
+    assert all(len(out[k]) == len(out["t"]) for k in ("temp_c", "clock_mhz", "cpu", "throttled"))
+    assert out["repeats"] == [{"start": 0.0, "end": 30.0, "valid": True}, {"start": 40.0, "end": 70.0, "valid": False}]
+    assert out["t"][-1] <= 71.0  # nothing after the last repeat but a second of tail
+
+
+def test_the_series_is_part_of_the_run_telemetry() -> None:
+    speed = speed_of(10.0)
+    samples = [{"t": 1.0 * i, "temp_c": 60.0, "clock_mhz": 3000.0, "cpu": 5.0, "throttled": False} for i in range(20)]
+    out = merge_telemetry({"speed": speed}, {"hz": 5}, samples, {})
+    assert out["telemetry"]["series"]["repeats"][0]["valid"] is True

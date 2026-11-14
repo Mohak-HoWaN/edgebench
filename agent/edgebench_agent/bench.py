@@ -101,6 +101,7 @@ def accuracy_pass(
     """Run every picture once. Annotated pictures are scored; every picture's detections are kept for inspection."""
     mapping, unmapped, how = class_map(data.names, model_names, bool(spec.get("dataset_names_generic")))
     acc = Accumulator(len(model_names))
+    by_source: dict[str, tuple[Accumulator, list[int]]] = {}  # capture source -> (its own numbers, [pictures])
     labelled = 0
     predictions: dict[str, list[list[float]]] = {}
     for n, entry in enumerate(data.entries):
@@ -113,6 +114,9 @@ def accuracy_pass(
             boxes, cls = boxes[keep], np.array([mapping[int(c)] for c in cls[keep]], dtype=np.int64)
             acc.add(dets, boxes, cls)
             labelled += 1
+            part, count = by_source.setdefault(entry.source, (Accumulator(len(model_names)), [0]))
+            part.add(dets, boxes, cls)
+            count[0] += 1
         progress(0.5 * (n + 1) / len(data.entries))
     metrics = acc.finish()
     if labelled == 0:
@@ -127,11 +131,32 @@ def accuracy_pass(
         "conf": spec["conf"],
         "iou": spec["iou"],
         **metrics_dict(metrics, model_names, acc),
+        "by_source": source_metrics(by_source),
     }, predictions
 
 
+def source_metrics(parts: dict[str, tuple[Accumulator, list[int]]]) -> dict[str, dict[str, float]]:
+    """Accuracy of each capture source on its own (rpi-cam3-wide, mobile, other), for pictures that were annotated."""
+    out: dict[str, dict[str, float]] = {}
+    for source, (part, count) in parts.items():
+        m = part.finish()
+        if m is not None:
+            out[source] = {
+                "images": count[0],
+                "instances": sum(c["instances"] for c in m.per_class.values()),
+                "map50": m.map50,
+                "map50_95": m.map50_95,
+                "precision": m.precision,
+                "recall": m.recall,
+            }
+    return out
+
+
 def metrics_dict(m: Metrics, names: list[str], acc: Accumulator) -> dict[str, Any]:
+    curves = {**m.curves, "per_class": {names[c]: v for c, v in m.curves.get("per_class", {}).items()}}
     return {
+        "curves": curves,
+        "score_hist": m.score_hist,
         "map50": m.map50,
         "map50_95": m.map50_95,
         "precision": m.precision,

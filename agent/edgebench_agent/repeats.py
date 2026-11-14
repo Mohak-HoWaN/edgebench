@@ -77,6 +77,29 @@ def invalid_repeats(windows: list[dict[str, Any]], start_clock_mhz: float | None
     return bad
 
 
+def series(samples: list[dict[str, Any]], reps: list[dict[str, Any]], limit: int = 160) -> dict[str, Any]:
+    """Temperature, clock and CPU load over the run, thinned to about ``limit`` points, in seconds from the first
+    repeat's start, with where each repeat began and ended (and whether it was kept), for the temperature chart."""
+    t0, end = reps[0]["t_start"], reps[-1]["t_end"]
+    window = [s for s in samples if t0 - 1.0 <= s["t"] <= end + 1.0]
+    picked = window[:: max(1, -(-len(window) // limit))]
+    return {
+        "t": [round(s["t"] - t0, 2) for s in picked],
+        "temp_c": [s.get("temp_c") for s in picked],
+        "clock_mhz": [s.get("clock_mhz") for s in picked],
+        "cpu": [s.get("cpu") for s in picked],
+        "throttled": [s.get("throttled") for s in picked],
+        "repeats": [
+            {
+                "start": round(r["t_start"] - t0, 2),
+                "end": round(r["t_end"] - t0, 2),
+                "valid": bool(r.get("valid", True)),
+            }
+            for r in reps
+        ],
+    }
+
+
 def merge_telemetry(
     result: dict[str, Any], header: dict[str, Any], samples: list[dict[str, Any]], environment: dict[str, Any]
 ) -> dict[str, Any]:
@@ -106,5 +129,6 @@ def merge_telemetry(
         "sources": header.get("describe"),
         "start_clock_mhz": start_clock,
         "run": summarise(samples, 0.0, float("inf")),
+        "series": series(samples, reps),
     }
     return result
