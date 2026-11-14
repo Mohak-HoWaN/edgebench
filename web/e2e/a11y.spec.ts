@@ -9,7 +9,6 @@ const PATHS = [
   "/datasets",
   "/devices",
   "/experiments/new",
-  "/live",
   "/results",
   "/reports",
   "/settings",

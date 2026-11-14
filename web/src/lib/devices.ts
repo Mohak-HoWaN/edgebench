@@ -22,6 +22,8 @@ export interface Enrolment {
   device: DeviceInfo;
   enroll_token: string;
   server_url: string;
+  /** Where a Pi installs the agent from; null when the server has no agent source. */
+  package_url: string | null;
   expires_minutes: number;
 }
 

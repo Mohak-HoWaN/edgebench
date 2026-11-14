@@ -24,7 +24,6 @@ export const router = createBrowserRouter([
       { path: "devices", ...page(() => import("@/pages/Devices")) },
       { path: "experiments/new", ...page(() => import("@/pages/NewExperiment")) },
       { path: "experiments/:id", ...page(() => import("@/pages/ExperimentDetail")) },
-      { path: "live", ...page(() => import("@/pages/LiveRun")) },
       { path: "results", ...page(() => import("@/pages/Results")) },
       { path: "results/:id", ...page(() => import("@/pages/RunDetail")) },
       { path: "reports", ...page(() => import("@/pages/Reports")) },

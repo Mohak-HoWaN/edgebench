@@ -14,12 +14,14 @@ from fastapi.responses import FileResponse
 from . import __version__
 from .api import router
 from .api_agent import router as agent_router
+from .api_auth import router as auth_router
 from .api_datasets import router as datasets_router
 from .api_devices import router as devices_router
 from .api_experiments import router as experiments_router
 from .api_models import router as models_router
 from .api_runs import router as runs_router
 from .artifacts import ArtifactStore
+from .auth import Auth, AuthGate, check_bind
 from .config import Settings, get_settings
 from .converter_client import Converter
 from .dataset_versions import register_dataset_handlers
@@ -52,9 +54,11 @@ def _mount_spa(app: FastAPI, dist: Path) -> None:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    auth = Auth(settings.data_dir)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        check_bind(settings.host, auth)
         configure_logging(settings.log_level)
         migrate(settings.db_path)
         engine = make_engine(settings.db_path)
@@ -90,7 +94,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             engine.dispose()
 
     app = FastAPI(title="EdgeBench", version=__version__, lifespan=lifespan)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+    app.state.auth = auth
+    app.add_middleware(AuthGate, auth=auth)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)  # added last = runs first
+    app.include_router(auth_router)
     app.include_router(router)
     app.include_router(models_router)
     app.include_router(datasets_router)

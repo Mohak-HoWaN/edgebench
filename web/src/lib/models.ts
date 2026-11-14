@@ -64,7 +64,11 @@ export interface ConverterInfo {
 /** An error whose message is already fit to show to a person (the server writes them that way). */
 export class ApiError extends Error {}
 
+/** Any request that comes back 401 fires this, so the page asks again who is signed in (the session may have ended). */
+export const SIGNED_OUT = "edgebench:signed-out";
+
 export async function failure(res: Response): Promise<ApiError> {
+  if (res.status === 401) window.dispatchEvent(new Event(SIGNED_OUT)); // the session ended: ask who is signed in
   let detail: unknown;
   try {
     detail = ((await res.json()) as { detail?: unknown }).detail;

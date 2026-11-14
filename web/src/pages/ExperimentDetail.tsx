@@ -369,11 +369,6 @@ export default function ExperimentDetail() {
           {e.status === "running" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
           {STATUS_WORDS[e.status]}: {String(finished)} of {String(total)} runs finished
         </p>
-        {e.status === "running" ? (
-          <Link to="/live" className="text-sm text-primary underline-offset-4 hover:underline">
-            Watch live
-          </Link>
-        ) : null}
       </div>
       {e.status === "running" ? (
         <progress

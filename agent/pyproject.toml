@@ -14,6 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 opencv = ["opencv-python-headless"]
+# What a 64-bit Raspberry Pi OS needs: versions with aarch64 wheels (docs/phase-0-verdict.md); not yet run on a Pi.
+pi = ["numpy==2.2.6", "onnxruntime==1.25.1", "openvino==2026.1.0", "ncnn==1.0.20261020", "opencv-python-headless==4.12.0.88"]
 
 [project.scripts]
 edgebench-agent = "edgebench_agent.__main__:main"

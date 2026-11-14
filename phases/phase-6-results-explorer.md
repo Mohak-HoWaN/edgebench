@@ -19,6 +19,10 @@ figures. Colour must not be the only cue (marker shape or label too). Reuse the 
   - model/variant by capture-source accuracy table (the headline view for a dataset built from real-world variation);
   - drift chart per variant against the baseline.
 - Compare view: up to 4 runs side by side (config, metrics, differences marked significant or not).
+- **Compare models (owner request, 2026-11-12; was missing from this brief):** pick two models (for example v_0.0.0.2 and v_0.0.0.3) and see them
+  head to head on one dataset version and device: for each model its best variant under the owner's priority list (or chosen metrics), the
+  per-class AP difference matched by class name, the pictures where they disagree, and a plain verdict ("A wins on the first two priorities;
+  the speed difference is / is not significant"). It needs both models run on the same dataset version and settings; if not, it says what to run.
 - **Failure browser:** for a chosen run, the images where it missed, mis-classified or hallucinated, ordered by severity, with
   ground truth and prediction boxes; select frames and export them as a folder for the next annotation round.
 - Dashboard highlights: "fastest on Pi 5 within 1% mAP of baseline" computed from the data with the rule shown.

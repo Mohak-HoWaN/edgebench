@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
-from . import queue
+from . import package, queue
 from .api_models import services
 from .api_runs import run_spec
 from .artifacts import sha256_file
@@ -89,10 +89,14 @@ def _own_job(session: Session, device: Device, job_id: int) -> Job:
 @router.post("/enroll", dependencies=[Depends(same_origin)])
 def enroll(body: EnrollRequest, request: Request) -> EnrollResponse:
     s = services(request)
+    throttle, ip = request.app.state.auth.enroll_throttle, request.client.host if request.client else "-"
+    if wait := throttle.retry_after(ip):
+        raise HTTPException(429, f"Too many wrong tokens. Try again in {wait} s.", headers={"Retry-After": str(wait)})
     with Session(s.engine) as session:
         device = session.exec(select(Device).where(Device.enroll_hash == hash_token(body.token.strip()))).first()
         expires = device.enroll_expires_at if device else None
         if device is None or device.revoked or expires is None or expires < utcnow():
+            throttle.fail(ip)
             raise HTTPException(401, "That enrolment token is not valid or has expired. Create a new one in the app.")
         token = new_token("eb-device")
         device.token_hash, device.enroll_hash, device.enroll_expires_at = hash_token(token), None, None
@@ -105,6 +109,15 @@ def enroll(body: EnrollRequest, request: Request) -> EnrollResponse:
         out = EnrollResponse(device_id=device.id, device_token=token, name=device.name, kind=device.kind or "pc")
     s.publish({"type": "device.updated", "id": out.device_id})
     return out
+
+
+@router.get("/package/{name}")
+def agent_package(name: str, request: Request) -> Response:
+    """The agent's source package for ``pip install``. Public on purpose: it holds no secret (see package.py)."""
+    built = package.build(services(request).settings.agent_dir)
+    if built is None or built[0] != name:
+        raise HTTPException(404, "This server has no such agent package.")
+    return Response(content=built[1], media_type="application/gzip")
 
 
 @router.post("/claim")

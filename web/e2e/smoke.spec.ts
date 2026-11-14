@@ -13,7 +13,6 @@ const PAGES = [
     heading: "New experiment",
     empty: "Something is missing before you can run",
   },
-  { link: "Live run", path: "/live", heading: "Live run", empty: "No run in progress" },
   { link: "Results", path: "/results", heading: "Results", empty: "No results yet" },
   { link: "Reports", path: "/reports", heading: "Reports", empty: "No reports yet" },
   { link: "Settings", path: "/settings", heading: "Settings", empty: "Appearance" },

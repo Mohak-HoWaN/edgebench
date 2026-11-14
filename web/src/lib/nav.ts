@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Package,
-  Radio,
   Settings,
 } from "lucide-react";
 
@@ -74,7 +73,6 @@ export const NAV: NavItem[] = [
       { id: "exp-plan", label: "What this will run" },
     ],
   },
-  { to: "/live", label: "Live run", icon: Radio, chord: "l", group: "experiments" },
   { to: "/results", label: "Results", icon: BarChart3, chord: "r", group: "experiments" },
   { to: "/reports", label: "Reports", icon: FileText, chord: "p", group: "experiments" },
   {

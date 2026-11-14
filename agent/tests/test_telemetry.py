@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 
 import psutil
+import pytest
 
-from edgebench_agent.telemetry import environment, read_file, summarise
+from edgebench_agent import telemetry
+from edgebench_agent.telemetry import decode_throttled, environment, read_file, summarise
 
 PACKAGE_PARENT = Path(__file__).resolve().parents[1]
 
@@ -101,3 +103,32 @@ def test_the_environment_names_the_core_layout_and_the_power_plan_or_governor() 
     env = environment()
     assert env["logical_cores"] and env["physical_cores"] and set(env) >= {"power_plan", "governor"}
     assert env["power_plan"] or env["governor"]  # one of the two is known on any system this runs on
+
+
+def test_throttle_bits_are_decoded_and_only_the_current_ones_flag_a_run() -> None:
+    assert decode_throttled(0) == ([], [])
+    assert decode_throttled(0x50005) == (["under-voltage", "throttled"], ["under-voltage", "throttled"])
+    assert decode_throttled(0x50000) == ([], ["under-voltage", "throttled"])  # long past: says nothing about this run
+    assert decode_throttled(0x8) == (["soft temperature limit"], [])
+
+
+def test_a_pi_profile_reads_the_throttle_flag_from_a_stand_in_vcgencmd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The agent on this PC with `vcgencmd` replaced by a fixture: the same code path a Pi takes."""
+    answers = iter(["throttled=0x0", "throttled=0x50005", "throttled=0x50000", "garbage"])
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(telemetry.shutil, "which", lambda name: "/usr/bin/vcgencmd" if name == "vcgencmd" else None)
+    monkeypatch.setattr(
+        telemetry.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=next(answers) + "\n"),
+    )
+    src = telemetry.Sources(None)
+    assert src.describe()["throttle"] == "vcgencmd get_throttled"
+    seen = []
+    for _ in range(4):
+        src._throttle_at = 0.0  # let the one-second cache expire
+        seen.append((src._throttle(), list(src.throttle_now)))
+    assert seen == [(False, []), (True, ["under-voltage", "throttled"]), (False, []), (None, [])]
+    # and the repeat is marked: a window with a current flag lists why
+    w = summarise([row(1.0, throttled=True, throttle_now=["under-voltage"]), row(2.0, throttled=False)], 0.0, 3.0)
+    assert w["throttled"] is True and w["throttle_reasons"] == ["under-voltage"]

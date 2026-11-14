@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
+from . import package
 from .api_models import services
 from .devices import ENROLL_TTL, hash_token, is_online, new_token
 from .models import Device, Run, utcnow
@@ -39,6 +40,7 @@ class Enrolment(BaseModel):
     device: DeviceOut
     enroll_token: str  # shown once; only its hash is kept
     server_url: str
+    package_url: str | None  # where a Pi installs the agent from; None when this server has no agent source
     expires_minutes: int
 
 
@@ -70,7 +72,17 @@ def _device_or_404(session: Session, device_id: int) -> Device:
 
 
 def _server_url(request: Request) -> str:
-    return f"{request.url.scheme}://{request.headers.get('host', 'localhost:8000')}"
+    configured = services(request).settings.public_url
+    return (
+        configured.rstrip("/")
+        if configured
+        else f"{request.url.scheme}://{request.headers.get('host', 'localhost:8000')}"
+    )
+
+
+def _package_url(request: Request) -> str | None:
+    built = package.build(services(request).settings.agent_dir)
+    return f"{_server_url(request)}/agent/package/{built[0]}" if built else None
 
 
 def _issue_enroll_token(session: Session, d: Device) -> str:
@@ -100,7 +112,13 @@ def add_device(body: NewDevice, request: Request) -> Enrolment:
         token = _issue_enroll_token(session, d)
         out = _out(session, d)
     s.publish({"type": "device.updated", "id": out.id})
-    return Enrolment(device=out, enroll_token=token, server_url=_server_url(request), expires_minutes=60)
+    return Enrolment(
+        device=out,
+        enroll_token=token,
+        server_url=_server_url(request),
+        package_url=_package_url(request),
+        expires_minutes=60,
+    )
 
 
 @router.post("/api/devices/{device_id}/enroll-token", dependencies=guarded)
@@ -113,7 +131,13 @@ def reissue_token(device_id: int, request: Request) -> Enrolment:
         token = _issue_enroll_token(session, d)
         out = _out(session, d)
     s.publish({"type": "device.updated", "id": device_id})
-    return Enrolment(device=out, enroll_token=token, server_url=_server_url(request), expires_minutes=60)
+    return Enrolment(
+        device=out,
+        enroll_token=token,
+        server_url=_server_url(request),
+        package_url=_package_url(request),
+        expires_minutes=60,
+    )
 
 
 @router.delete("/api/devices/{device_id}", status_code=204, dependencies=guarded)

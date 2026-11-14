@@ -28,8 +28,9 @@ side.
 - Core pinning with `taskset`; threads via each runtime's own setting (ORT `intra_op_num_threads`, OpenVINO `INFERENCE_NUM_THREADS`,
   ncnn `opt.num_threads`). Governor change to `performance` only with explicit permission in the UI and restored afterwards.
 - Dataset and artifact transfer: resumable download, sha256 check, cache by hash so each is sent once.
-- Multi-device experiments: one wizard run fans out per device; Live Run page shows progress per device, current variant, live latency
-  and temperature charts, streaming logs, pause / cancel / resume. A device going offline marks its runs `lost` and does not stop the
+- Multi-device experiments: one wizard run fans out per device; the experiment page shows progress per device, current variant, live latency
+  and temperature charts, streaming logs, pause / cancel / resume. (The separate Live run page was removed on 2026-11-12: it only repeated
+  the progress bars. A live view comes back inside the experiment page once there are charts to show, Phase 6.) A device going offline marks its runs `lost` and does not stop the
   others.
 - Device-specific builds: TensorRT engines are built by the **PC agent** (RTX 4050) as a job, not by the server.
 - Cooling notes: user-entered text per device, stored in the manifest.

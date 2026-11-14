@@ -434,14 +434,7 @@ export default function RunDetail() {
             onClick={() => {
               again.mutate(r.id, {
                 onSuccess: (next) => {
-                  toast.success(`Run ${String(next.id)} was queued`, {
-                    action: {
-                      label: "Watch live",
-                      onClick: () => {
-                        void navigate("/live");
-                      },
-                    },
-                  });
+                  toast.success(`Run ${String(next.id)} was queued`);
                   void navigate(`/results/${String(next.id)}`);
                 },
                 onError: (e) => {

@@ -458,6 +458,22 @@ test("a device is added, shows the command to connect it, and goes online when i
   ); // works once
 });
 
+test("a Raspberry Pi gets an install command from this server, with a warning while the address is this PC's", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/devices");
+  await page.getByLabel("Type").selectOption("pi");
+  await page.getByRole("button", { name: "Get a connection command" }).click();
+  const command = page.locator("pre");
+  await expect(command).toHaveText(
+    /^python3 -m venv ~\/edgebench-agent-env && \S+ install "edgebench-agent\[pi\] @ http:\/\/127\.0\.0\.1:\d+\/agent\/package\/edgebench_agent-[\d.]+\.tar\.gz" && \S+ --server http:\/\/127\.0\.0\.1:\d+ --token eb-enroll-\S+$/,
+  );
+  await expect(page.getByRole("alert").filter({ hasText: "only works on this PC" })).toBeVisible();
+  const url = /@ (\S+)"/.exec(await command.innerText())?.[1] ?? "";
+  expect((await request.get(new URL(url).pathname)).status()).toBe(200); // the address in the command serves the package
+});
+
 test("a machine that is not what you said it is gets a plain warning", async ({
   page,
   request,
@@ -853,13 +869,6 @@ test("a run that is made again shows live, is tinted and numbered in its experim
   await expect(
     page.getByRole("status").filter({ hasText: "Waiting for the device" }),
   ).toBeVisible();
-
-  // it is on the Live run page while it waits
-  await page.goto("/live");
-  await expect(page.getByRole("list", { name: "Runs that are running or waiting" })).toContainText(
-    "retail",
-  );
-  await expect(page.getByText("Running and waiting (1)")).toBeVisible();
 
   const jobAgain = await takeJob(request, auth);
   await report(request, auth, jobAgain, resultFor(0.5, 9));

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { SIGNED_OUT } from "@/lib/models";
 
 /** Shape of GET /api/health (server/edgebench/api.py). */
 export interface Health {
@@ -13,6 +14,7 @@ export interface Health {
 
 export async function getHealth(signal?: AbortSignal): Promise<Health> {
   const res = await fetch("/api/health", { signal });
+  if (res.status === 401) window.dispatchEvent(new Event(SIGNED_OUT));
   if (!res.ok) throw new Error(`The server answered ${String(res.status)}`);
   return (await res.json()) as Health;
 }

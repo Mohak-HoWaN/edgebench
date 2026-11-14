@@ -1,13 +1,15 @@
-import { Search } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 import { Suspense, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { CommandPalette, usePalette } from "@/components/CommandPalette";
 import { HistoryButtons } from "@/components/HistoryButtons";
+import { Login } from "@/components/Login";
 import { StatusPill } from "@/components/StatusPill";
 import { ThemeToggleButton } from "@/components/ThemeControls";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHealth } from "@/lib/api";
+import { logOut, useAuth } from "@/lib/auth";
 import { useLiveEvents } from "@/lib/connection";
 import { GROUP_LABEL, NAV, type NavItem } from "@/lib/nav";
 import { useShortcuts } from "@/lib/shortcuts";
@@ -113,7 +115,15 @@ function useScrollToHash() {
   }, [pathname, hash, key]);
 }
 
+/** The app, or the sign-in page when the server has an owner password and this browser has no session. */
 export function AppShell() {
+  const auth = useAuth();
+  if (auth.isPending) return <Splash />;
+  if (auth.data?.enabled && !auth.data.signed_in) return <Login />;
+  return <Shell signOut={auth.data?.enabled === true} />;
+}
+
+function Shell({ signOut }: { signOut: boolean }) {
   useScrollToHash();
   useLiveEvents();
   useShortcuts();
@@ -167,6 +177,20 @@ export function AppShell() {
               <kbd className="hidden rounded border px-1.5 text-xs sm:inline">Ctrl K</kbd>
             </Button>
             <ThemeToggleButton />
+            {signOut ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void logOut().then(() => {
+                    window.location.reload();
+                  });
+                }}
+              >
+                <LogOut aria-hidden />
+                <span className="sr-only sm:not-sr-only">Sign out</span>
+              </Button>
+            ) : null}
           </div>
         </header>
 

@@ -12,9 +12,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EDGEBENCH_", env_file=".env", extra="ignore")
 
     data_dir: Path = Path("data")
-    # Local only by default; exposing the server on the LAN is a Phase 5 decision that needs device tokens (ADR 0003).
+    # Local only by default; any other address needs an owner password first (ADR 0005: `edgebench set-password`).
     host: str = "127.0.0.1"
+    # Mark the session cookie Secure when a tunnel or proxy serves https but forwards plain http to this server.
+    secure_cookie: bool = False
     port: int = 8000
+    # The address other machines use to reach this server, used in the Devices page's commands (not localhost).
+    public_url: str | None = None
+    agent_dir: Path = Path(__file__).resolve().parents[2] / "agent"
     # Host names the server answers to. Refusing the rest blocks DNS-rebinding pages (hostile name -> 127.0.0.1).
     # No IPv6 literal: Starlette splits the Host header at the first ":", so "[::1]:8000" can never match.
     allowed_hosts: list[str] = ["localhost", "127.0.0.1"]
@@ -39,6 +44,15 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "edgebench.db"
+
+
+def find_converter_python(root: Path) -> Path | None:
+    """The converter environment next to the repository, as scripts/start-server.ps1 finds it (same order)."""
+    for name in (".venv-converter", "spikes/.venv"):
+        for exe in ("Scripts/python.exe", "bin/python"):
+            if (root / name / exe).is_file():
+                return root / name / exe
+    return None
 
 
 @lru_cache

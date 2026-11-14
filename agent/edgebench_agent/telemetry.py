@@ -85,6 +85,18 @@ class Pdh:
             self.dll.PdhCloseQuery(self.query)
 
 
+# `vcgencmd get_throttled`: bits 0-3 say what is happening now, bits 16-19 what happened at any time since boot.
+THROTTLE_BITS = {0: "under-voltage", 1: "frequency capped", 2: "throttled", 3: "soft temperature limit"}
+
+
+def decode_throttled(value: int) -> tuple[list[str], list[str]]:
+    """(happening now, happened since boot). Only the first says anything about the run being measured."""
+    return (
+        [name for bit, name in THROTTLE_BITS.items() if value >> bit & 1],
+        [name for bit, name in THROTTLE_BITS.items() if value >> (bit + 16) & 1],
+    )
+
+
 class Sources:
     """Everything this machine can tell us, read once per sample."""
 
@@ -102,6 +114,8 @@ class Sources:
                 self.pdh = Pdh(paths)
         self.vcgencmd = shutil.which("vcgencmd") if self.system == "Linux" else None
         self._throttle_at, self._throttled = 0.0, None
+        self.throttle_now: list[str] = []
+        self.throttle_since_boot: list[str] = []
         self.gpu: Any = None
         with contextlib.suppress(Exception):
             if "gpu" in skip:
@@ -172,11 +186,10 @@ class Sources:
                 out = subprocess.run(
                     [self.vcgencmd, "get_throttled"], capture_output=True, text=True, timeout=2, check=False
                 ).stdout
-                self._throttled = bool(
-                    int(out.strip().split("=")[1], 16) & 0xF
-                )  # under-voltage, capped, throttled, soft limit
+                self.throttle_now, self.throttle_since_boot = decode_throttled(int(out.strip().split("=")[1], 16))
+                self._throttled = bool(self.throttle_now)
             except (OSError, subprocess.SubprocessError, ValueError, IndexError):
-                self._throttled = None
+                self._throttled, self.throttle_now = None, []
         return self._throttled
 
     def _gpu(self) -> dict[str, float | None]:
@@ -204,6 +217,7 @@ class Sources:
             "clock_mhz": clock,
             "temp_c": temp,
             "throttled": self._throttle(),
+            "throttle_now": self.throttle_now,
             **self._gpu(),
         }
 
@@ -238,6 +252,7 @@ def summarise(samples: list[dict[str, Any]], t0: float, t1: float) -> dict[str, 
         "temp_c_start": temps[0] if temps else None,
         "temp_c_max": max(temps) if temps else None,
         "throttled": any(flags) if flags else None,
+        "throttle_reasons": sorted({r for s in window for r in s.get("throttle_now") or []}),
         "gpu_util_mean": _mean(column("gpu_util")),
         "gpu_mem_peak_mb": max(column("gpu_mem_mb")) if column("gpu_mem_mb") else None,
         "gpu_temp_c_max": max(column("gpu_temp_c")) if column("gpu_temp_c") else None,

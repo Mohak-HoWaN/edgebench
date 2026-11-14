@@ -24,17 +24,35 @@ import { cn } from "@/lib/utils";
 
 const KIND: Record<DeviceKind, string> = { pc: "PC", pi: "Raspberry Pi" };
 
+const ENV = "~/edgebench-agent-env";
+
+/** A Pi installs the agent from this server into its own virtual environment; a PC runs it from the repository's agent folder. */
 function command(e: Enrolment): string {
-  return `python -m edgebench_agent --server ${e.server_url} --token ${e.enroll_token}`;
+  const join = `--server ${e.server_url} --token ${e.enroll_token}`;
+  return e.device.expected_kind === "pi" && e.package_url
+    ? `python3 -m venv ${ENV} && ${ENV}/bin/pip install "edgebench-agent[pi] @ ${e.package_url}" && ${ENV}/bin/edgebench-agent ${join}`
+    : `python -m edgebench_agent ${join}`;
 }
+
+const isLocal = (url: string) => ["localhost", "127.0.0.1"].includes(new URL(url).hostname);
 
 function EnrolmentPanel({ enrolment }: { enrolment: Enrolment }) {
   const text = command(enrolment);
   return (
     <div className="mt-4 max-w-prose space-y-2 border-l-2 border-primary pl-4 text-sm">
       <p className="font-medium">
-        Run this on {enrolment.device.name}, in the folder that holds the agent
+        Run this on {enrolment.device.name}
+        {enrolment.device.expected_kind === "pi" && enrolment.package_url
+          ? ""
+          : ", in the folder that holds the agent"}
       </p>
+      {enrolment.device.expected_kind === "pi" && isLocal(enrolment.server_url) ? (
+        <p role="alert" className="text-destructive">
+          This address only works on this PC. Open EdgeBench by the address the Pi will use (the
+          PC's network or Tailscale address), or start the server with EDGEBENCH_PUBLIC_URL set,
+          then make a new token.
+        </p>
+      ) : null}
       <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{text}</pre>
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -54,7 +72,7 @@ function EnrolmentPanel({ enrolment }: { enrolment: Enrolment }) {
           <Copy aria-hidden />
           Copy
         </Button>
-        <Info>{`The token works once and expires in ${String(enrolment.expires_minutes)} minutes. The agent needs the agent folder and its Python packages (see agent/README.md). A Raspberry Pi on another network cannot reach this address yet: Pi support comes in a later version.`}</Info>
+        <Info>{`The token works once and expires in ${String(enrolment.expires_minutes)} minutes. A Pi needs 64-bit Raspberry Pi OS with Python 3.11 or newer; the command installs the agent and its runtimes from this server and from the internet. Not yet run on a real Pi.`}</Info>
       </div>
     </div>
   );
