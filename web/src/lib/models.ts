@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type VariantState =
   "pending" | "converting" | "ready" | "failed" | "unavailable" | "cancelled";
-export type ModelStatus = "inspecting" | "ready" | "converter_missing" | "rejected";
+export type ModelStatus =
+  "inspecting" | "ready" | "converter_missing" | "incompatible" | "rejected";
 
 export interface Verify {
   ok: boolean;
@@ -32,7 +33,20 @@ export interface Variant {
   verify: Verify | null;
   error: string | null;
   has_log: boolean;
+  /** The converter library versions that built it; null when it was made before they were recorded. */
+  built_with: Record<string, string> | null;
+  /** Why it no longer matches the converter (rebuild it), or null. */
+  stale: string | null;
   updated_at: string;
+}
+
+/** Where the file came from and whether this converter can read it (server/edgebench/compat.py). */
+export interface ModelCard {
+  trained_with: string | null;
+  architecture: string | null;
+  converter: string | null;
+  ok: boolean;
+  message: string | null;
 }
 
 export interface ModelInfo {
@@ -47,6 +61,7 @@ export interface ModelInfo {
   parameters: number | null;
   gflops: number | null;
   class_names: string[] | null;
+  card: ModelCard | null;
   sha256: string | null;
   created_at: string;
   variant_counts: Partial<Record<VariantState, number>>;
@@ -149,6 +164,7 @@ export function progressText(m: ModelInfo): string {
   if (m.status === "inspecting") return "Reading the model";
   if (m.status === "rejected") return "Could not be read";
   if (m.status === "converter_missing") return "Waiting for the converter";
+  if (m.status === "incompatible") return "Needs a newer converter";
   const c = m.variant_counts;
   const total = Object.values(c).reduce((a, b) => a + b, 0);
   const parts = [`${String(c.ready ?? 0)} of ${String(total)} converted`];
@@ -183,6 +199,19 @@ export function useConverter() {
     queryKey: ["converter"],
     queryFn: ({ signal }) => getJson<ConverterInfo>("/api/converter", signal),
     staleTime: 60_000,
+  });
+}
+
+/** Look at the converter environment again (after upgrading a library in it); every model is then judged against what it has. */
+export function useRefreshConverter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => send<ConverterInfo>("POST", "/api/converter/refresh"),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["converter"] }),
+        queryClient.invalidateQueries({ queryKey: modelsKey }),
+      ]),
   });
 }
 

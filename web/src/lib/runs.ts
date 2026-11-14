@@ -149,6 +149,8 @@ export interface RunInfo {
   message: string | null;
   result: RunResult | null;
   latency: Latency | null;
+  /** Recorded facts that point at the tool, not the model, when a result looks wrong. */
+  diagnosis: string[];
   error: string | null;
   created_at: string;
   started_at: string | null;

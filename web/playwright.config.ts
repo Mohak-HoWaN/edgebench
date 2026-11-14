@@ -44,6 +44,7 @@ const api = {
     // Browser tests use the server's stand-in converter (no torch needed) told to produce one failure, one missing package
     // and one output that differs from PyTorch, so a single upload shows every state the grid can be in.
     EDGEBENCH_CONVERTER_PYTHON: python,
+    FAKE_ULTRALYTICS_FILE: path.join(dataDir, "ultralytics.txt"), // the stand-in converter claims the version written here
     EDGEBENCH_CONVERTER_DIR: path.resolve("..", "server", "tests", "fake_converter"),
     FAKE_BEHAVIOR:
       "ncnn_fp16=fail,openvino_fp16=mismatch,ncnn_fp32=unavailable,torchscript=verifyfail",

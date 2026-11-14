@@ -33,7 +33,8 @@ class MlModel(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
     filename: str = ""
     size_bytes: int = 0
-    # inspecting -> ready; or converter_missing (no converter environment: retry); or rejected (not a usable model)
+    # inspecting -> ready; or converter_missing (no converter environment: retry); or incompatible (the converter is too
+    # old for this model: upgrade it, then check again); or rejected (not a usable model)
     status: str = "inspecting"
     error: str | None = None
     # The model card, read by converter/inspect_pt.py.
@@ -42,6 +43,8 @@ class MlModel(SQLModel, table=True):
     parameters: int | None = None
     gflops: float | None = None
     class_names: list[str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    # Where the file came from and whether this converter can read it (compat.check); None before it was inspected.
+    card: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     archived: bool = False
 
 
@@ -72,6 +75,8 @@ class Variant(SQLModel, table=True):
     error: str | None = None
     log: str | None = None
     job_id: int | None = None
+    # The converter library versions that built it (compat.stale_reason); None: made before they were recorded.
+    toolchain: dict[str, str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 

@@ -24,6 +24,7 @@ from typing import Any
 from .config import Settings
 
 LOG_LIMIT = 64 * 1024
+INFO_TTL = 120.0  # seconds a probe of the converter environment is trusted
 
 
 @dataclass
@@ -74,6 +75,7 @@ class Converter:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._info: ConverterInfo | None = None
+        self._info_at: float | None = None  # None while the info was set from outside (tests)
         self._lock = threading.Lock()
 
     @property
@@ -146,11 +148,14 @@ class Converter:
         return Outcome(_last_result(lines), proc.returncode, reason, "\n".join(lines))
 
     def info(self, refresh: bool = False) -> ConverterInfo:
-        """What the converter environment can do. Cached; the probe imports nothing heavy."""
+        """What the converter environment can do. Cached for INFO_TTL seconds, so an upgrade shows up without a restart;
+        the probe imports nothing heavy."""
         with self._lock:
-            if self._info is not None and not refresh:
+            fresh = self._info is not None and (self._info_at is None or time.monotonic() - self._info_at < INFO_TTL)
+            if fresh and not refresh:
+                assert self._info is not None
                 return self._info
-            self._info = self._probe()
+            self._info, self._info_at = self._probe(), time.monotonic()
             return self._info
 
     def _probe(self) -> ConverterInfo:

@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlmodel import Session, col, select
 
-from . import calibration, queue
+from . import calibration, compat, queue
 from .matrix import BY_NAME, OPS, Op, cache_key, settings_for, settings_key
 from .models import Artifact, MlModel, Variant, utcnow
 from .services import Services
@@ -67,7 +67,8 @@ def register_artifact(session: Session, sha: str, kind: str, size: int) -> None:
 
 def ensure_matrix(s: Services, model_id: int) -> list[int]:
     """Create the missing cells and queue every cell not already ready or in progress. Returns the queued ids."""
-    toolchain = s.converter.info().fingerprint
+    info = s.converter.info()
+    toolchain, versions = info.fingerprint, info.versions
     to_queue: list[int] = []
     with Session(s.engine) as session:
         model = session.get(MlModel, model_id)
@@ -98,7 +99,9 @@ def ensure_matrix(s: Services, model_id: int) -> list[int]:
                     settings_key=key,
                     cache_key=ck,
                 )
-            elif existing.state in ("ready", "pending", "converting"):
+            elif existing.state in ("pending", "converting") or (
+                existing.state == "ready" and compat.stale_reason(existing.toolchain, versions) is None
+            ):
                 continue
             existing.cache_key = ck
             existing.state, existing.error, existing.mismatch, existing.cached = "pending", None, False, False
@@ -182,11 +185,15 @@ def add_variant(
 
 
 def retry_variant(s: Services, variant_id: int) -> bool:
-    toolchain = s.converter.info().fingerprint
+    """Convert a failed, unavailable or cancelled cell again, or rebuild a finished one a new converter made stale."""
+    info = s.converter.info()
+    toolchain = info.fingerprint
     with Session(s.engine) as session:
         v = session.get(Variant, variant_id)
         model = session.get(MlModel, v.model_id) if v else None
-        if v is None or model is None or model.archived or not model.artifact_sha256 or v.state not in RETRYABLE:
+        if v is None or model is None or model.archived or not model.artifact_sha256:
+            return False
+        if v.state not in RETRYABLE and not (v.state == "ready" and compat.stale_reason(v.toolchain, info.versions)):
             return False
         # The converter may have been set up or upgraded since this cell was made: the key must name the toolchain that
         # runs now (ADR 0002).
@@ -263,7 +270,7 @@ def _source_for(s: Services, v: Variant) -> tuple[Path | None, str | None]:
 
 
 def make_inspect_handler(s: Services) -> Handler:
-    def inspect_job(ctx: JobContext) -> dict[str, Any]:
+    def inspect_job(ctx: JobContext) -> dict[str, Any]:  # noqa: PLR0911 - one return per outcome of the job
         model_id = int(ctx.params["model_id"])
         with Session(s.engine) as session:
             model = session.get(MlModel, model_id)
@@ -273,13 +280,19 @@ def make_inspect_handler(s: Services) -> Handler:
             raise PermanentError(f"model {model_id} has no file")
         if removed:
             return {"skipped": "the model was removed"}
+        backfill = bool(ctx.params.get("backfill"))
         info = s.converter.info()
         if not info.available:
+            if backfill:
+                return {"skipped": "no converter"}  # a model that is fine stays fine; its card waits for the next start
             _set_model(s, model_id, status="converter_missing", error=info.message)
             return {"status": "converter_missing"}
-        _set_model(s, model_id, status="inspecting", error=None)
+        if not backfill:
+            _set_model(s, model_id, status="inspecting", error=None)
         outcome = s.converter.run_inspect(s.store.path(sha))
         card = outcome.result
+        if backfill and (outcome.reason != "finished" or card is None or not card.get("ok")):
+            return {"skipped": "could not be read again"}
         if outcome.reason == "timeout":
             _set_model(s, model_id, status="rejected", error="Reading the model took too long, so it was stopped.")
             return {"status": "rejected"}
@@ -289,17 +302,24 @@ def make_inspect_handler(s: Services) -> Handler:
             )[-1]
             _set_model(s, model_id, status="rejected", error=f"This file could not be read as a model: {reason}")
             return {"status": "rejected"}
+        verdict = compat.check(card, info.versions, info.python)
+        if backfill and verdict["ok"]:
+            _set_model(s, model_id, card=verdict)  # a model read before cards existed: record it, change nothing else
+            return {"status": "ready", "card": "recorded"}
         _set_model(
             s,
             model_id,
-            status="ready",
-            error=None,
+            status="ready" if verdict["ok"] else "incompatible",
+            error=verdict["message"],
             task=card["task"],
             imgsz=card["imgsz"],
             parameters=card["parameters"],
             gflops=card["gflops"],
             class_names=card["class_names"],
+            card=verdict,
         )
+        if not verdict["ok"]:
+            return {"status": "incompatible"}  # no variants: they would look finished and be wrong
         ensure_matrix(s, model_id)
         return {"status": "ready", "variants": len([op for op in OPS if not op.calibrated])}
 
@@ -337,6 +357,7 @@ class _Conversion:
                 seconds=hit.seconds,
                 verify=hit.verify,
                 mismatch=hit.mismatch,
+                toolchain=hit.toolchain or self.s.converter.info().versions,
                 log="Reused an identical earlier conversion; nothing was run.",
             )
             return {"state": "ready", "cached": True}
@@ -405,6 +426,7 @@ class _Conversion:
             seconds=result["seconds"],
             verify=check,
             mismatch=not check.get("ok", False),
+            toolchain=s.converter.info().versions,
             log=log,
         )
         return {"state": "ready"}
@@ -439,6 +461,19 @@ def make_convert_handler(s: Services) -> Handler:
         return outcome
 
     return convert_job
+
+
+def queue_missing_cards(s: Services) -> int:
+    """Models read before cards existed get theirs now, so an old model the converter cannot read does not look fine.
+    Only the card is recorded (a model found incompatible is stopped); nothing is converted or rebuilt."""
+    with Session(s.engine) as session:
+        rows = session.exec(select(MlModel).where(MlModel.status == "ready", col(MlModel.archived).is_(False))).all()
+        ids = [
+            m.id for m in rows if m.id is not None and m.card is None
+        ]  # in Python: JSON null and SQL NULL both count
+    for model_id in ids:
+        queue.enqueue(s.engine, "inspect", {"model_id": model_id, "backfill": True})
+    return len(ids)
 
 
 def register_handlers(s: Services) -> None:

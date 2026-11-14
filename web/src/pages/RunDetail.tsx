@@ -409,6 +409,16 @@ export default function RunDetail() {
           {r.error}
         </p>
       ) : null}
+      {r.diagnosis.length ? (
+        <div role="alert" className="mb-4 max-w-prose border-l-2 border-warn pl-4 text-sm">
+          <p className="font-medium">Check the tools before judging the model</p>
+          <ul className="list-disc pl-5">
+            {r.diagnosis.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="mb-6 flex flex-wrap gap-2">
         {active ? (

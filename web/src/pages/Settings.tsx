@@ -7,6 +7,7 @@ import { ThemeChoiceGroup } from "@/components/ThemeControls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHealth } from "@/lib/api";
+import { useConverter, useRefreshConverter } from "@/lib/models";
 import { useDriftLimits } from "@/lib/drift";
 import { usePriority } from "@/lib/metrics";
 import { SHORTCUTS } from "@/lib/shortcuts";
@@ -74,6 +75,8 @@ function DriftLimitsEditor() {
 export default function Settings() {
   const confirm = useConfirm();
   const health = useHealth();
+  const converter = useConverter();
+  const refreshConverter = useRefreshConverter();
   const resetTheme = useTheme((s) => s.reset);
   const resetPriority = usePriority((s) => s.reset);
   const resetLimits = useDriftLimits((s) => s.reset);
@@ -131,6 +134,41 @@ export default function Settings() {
             </div>
           ))}
         </dl>
+      </Section>
+
+      <Section title="Converter" id="converter">
+        <p className="text-sm">
+          {converter.data
+            ? converter.data.available
+              ? Object.entries(converter.data.versions)
+                  .map(([name, version]) => `${name} ${version}`)
+                  .join(", ")
+              : (converter.data.message ?? "The converter is not set up.")
+            : "Reading converter details."}
+        </p>
+        <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+          Models are read and converted with these libraries. A model trained with a newer
+          Ultralytics than the one listed is stopped with an explanation instead of being converted
+          wrongly.
+        </p>
+        <Button
+          className="mt-2"
+          variant="outline"
+          size="sm"
+          disabled={refreshConverter.isPending}
+          onClick={() => {
+            refreshConverter.mutate(undefined, {
+              onSuccess: () => {
+                toast.success("Converter checked again");
+              },
+              onError: (e) => {
+                toast.error(e.message);
+              },
+            });
+          }}
+        >
+          Check the converter again
+        </Button>
       </Section>
 
       <Section title="About this server" id="about">

@@ -387,7 +387,7 @@ def plan_experiment(body: NewExperiment, request: Request) -> PlanOut:
     with Session(s.engine) as session:
         configs, pruned = _expand(session, body)
         prepared = prepare_run(
-            session, _run_for(body, configs[0])
+            session, _run_for(body, configs[0]), s.converter.info().versions
         )  # the first run stands for the dataset and device checks
         images = prepared.version.image_count
         if body.params.max_images:
@@ -439,7 +439,10 @@ def start_experiment(body: NewExperiment, request: Request) -> ExperimentOut:
     with Session(s.engine) as session:
         configs, _ = _expand(session, body)
         runs = [_run_for(body, c) for c in configs]
-        prepared = [prepare_run(session, r) for r in runs]  # raises a 422 naming the problem before anything is made
+        versions = s.converter.info().versions
+        prepared = [
+            prepare_run(session, r, versions) for r in runs
+        ]  # raises a 422 naming the problem before anything is made
         first = prepared[0]
         experiment = Experiment(
             name=body.name.strip(),
@@ -503,7 +506,7 @@ def resume_experiment(experiment_id: int, request: Request) -> ExperimentOut:
         redo = {c.key for c in todo}
         runs = [_run_for(body, c) for c in todo]
         for r in runs:
-            prepare_run(session, r)
+            prepare_run(session, r, s.converter.info().versions)
         for old in existing:
             if status[old.id] in REPLACEABLE and _config_key(old) in redo:
                 session.delete(old)  # a cancelled or lost run has no result; the new run takes its place

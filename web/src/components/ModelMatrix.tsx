@@ -63,6 +63,12 @@ function Cell({ variant, onLog }: { variant: Variant; onLog: () => void }) {
       </p>
       {variant.state === "ready" ? (
         <>
+          {variant.stale ? (
+            <p className="flex items-start gap-1 text-xs text-warn [&_svg]:mt-0.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
+              <AlertTriangle aria-hidden />
+              {variant.stale}
+            </p>
+          ) : null}
           <p className="tabular-nums text-muted-foreground">
             {formatBytes(variant.size_bytes ?? 0)}
             {variant.cached
@@ -96,7 +102,7 @@ function Cell({ variant, onLog }: { variant: Variant; onLog: () => void }) {
             ) : (
               <p
                 className="text-xs text-muted-foreground"
-                title={`Largest difference from PyTorch ${percent(check.relative)}, limit ${percent(check.tolerance)}`}
+                title={`Largest difference from PyTorch ${percent(check.relative)}, limit ${percent(check.tolerance)}. This compares with PyTorch as this converter reads the model; it does not prove the converter reads your model correctly. Run it on labelled pictures for that.`}
               >
                 Matches PyTorch
               </p>
@@ -124,7 +130,7 @@ function Cell({ variant, onLog }: { variant: Variant; onLog: () => void }) {
             </span>
           </a>
         ) : null}
-        {["failed", "unavailable", "cancelled"].includes(variant.state) ? (
+        {["failed", "unavailable", "cancelled"].includes(variant.state) || variant.stale ? (
           <Button
             size="xs"
             variant="outline"
@@ -133,7 +139,7 @@ function Cell({ variant, onLog }: { variant: Variant; onLog: () => void }) {
               act(retry);
             }}
           >
-            Retry
+            {variant.stale ? "Rebuild" : "Retry"}
             <span className="sr-only">
               {" "}
               {variant.format} {variant.precision}

@@ -52,3 +52,10 @@ Without it the server still runs; uploaded models are kept, and the Models page 
 float: the default left a model that returns no detections) need `--source` (the ONNX FP32 file) and `--calibration FOLDER` with at least 50
 **different** readable pictures (copies are counted once; one picture repeated gave a worse model than 128 real ones). The result's check is shape
 and finiteness only: whether it is still good is decided by the accuracy check of an experiment with the `.pt` baseline.
+
+## Upgrading a library in the converter
+
+After upgrading (for example Ultralytics for a newer model family), press **Check the converter again** on the Settings page (or wait two
+minutes). Models the converter was too old for can then be re-read with **Check again**, and conversions built before the change show
+"Built by an older converter" with a **Rebuild** button. Use `spikes/constraints.txt` (or `constraints-*.txt`) so torch, numpy and OpenCV
+stay pinned: `python -m pip install "ultralytics>=8.4" -c <constraints file>`.

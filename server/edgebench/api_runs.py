@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
-from . import latency, queue
+from . import compat, latency, queue
 from .api_models import services
 from .dataset_versions import find_version
 from .models import Dataset, DatasetVersion, Device, Job, MlModel, Run, Variant
@@ -66,6 +66,7 @@ class RunOut(BaseModel):
     message: str | None
     result: dict[str, Any] | None
     latency: dict[str, Any] | None  # headline latency with its interval over the repeats (latency.summary)
+    diagnosis: list[str]  # facts that point at the tool, not the model, when a result looks wrong (see diagnose)
     error: str | None
     created_at: datetime
     started_at: datetime | None
@@ -103,6 +104,26 @@ def variant_label(variant: Variant | None, model: MlModel | None) -> str:
     return cell_label(variant, "" if own else f" at {variant.imgsz} px")
 
 
+def diagnose(run: Run, model: MlModel | None, variant: Variant | None, device: Device | None) -> list[str]:
+    """Why a result may be the tool's fault. Only facts that were recorded; nothing is tuned and nothing is guessed."""
+    found: list[str] = []
+    trained = (model.card or {}).get("trained_with") if model else None
+    if variant is not None:
+        why = compat.older_than_model(
+            (variant.toolchain or {}).get("ultralytics"), trained, "This conversion was built by"
+        )
+    else:
+        packages = (device.fingerprint or {}).get("packages") if device else None
+        library = packages.get("ultralytics") if isinstance(packages, dict) else None
+        why = compat.older_than_model(library, trained, "The device's agent has")
+    if why:
+        found.append(why)
+    accuracy = (run.result or {}).get("accuracy") or {}
+    if accuracy.get("available") and accuracy.get("recall") == 0:
+        found.append("It found none of the labelled objects. Check that the dataset's classes and pictures suit it.")
+    return found
+
+
 def run_out(s: Services, session: Session, run: Run) -> RunOut:
     assert run.id is not None
     job = session.get(Job, run.job_id) if run.job_id else None
@@ -133,6 +154,7 @@ def run_out(s: Services, session: Session, run: Run) -> RunOut:
         message=live.get("message") if status == "running" else None,
         result=run.result,
         latency=latency.summary((run.result or {}).get("speed")),
+        diagnosis=diagnose(run, model, variant, device),
         error=run.error or (job.error if job and status in ("failed", "lost") else None),
         created_at=run.created_at,
         started_at=run.started_at,
@@ -176,10 +198,12 @@ def check_cpu_settings(device: Device, params: RunParams) -> None:
         )
 
 
-def prepare_run(session: Session, body: NewRun) -> Prepared:
+def prepare_run(session: Session, body: NewRun, versions: dict[str, str]) -> Prepared:
     """Check that everything a run needs exists and is ready. Raises a 422 that says which part is not."""
     model = session.get(MlModel, body.model_id)
     if model is None or model.archived or model.status != "ready" or not model.artifact_sha256:
+        if model is not None and model.status == "incompatible" and model.error:
+            raise HTTPException(422, f"{model.name} cannot be run yet. {model.error}")
         raise HTTPException(422, "That model is not ready to run.")
     variant = None
     if body.variant_id is not None:
@@ -188,6 +212,9 @@ def prepare_run(session: Session, body: NewRun) -> Prepared:
             raise HTTPException(422, "That conversion does not belong to this model.")
         if variant.state != "ready" or not variant.artifact_sha256:
             raise HTTPException(422, "That conversion is not finished, so it cannot be run.")
+        if stale := compat.stale_reason(variant.toolchain, versions):
+            # Not "your model is bad": a result from a variant the current converter did not build proves little.
+            raise HTTPException(422, f"{model.name}, {variant_label(variant, model)}: {stale}")
     dataset = session.get(Dataset, body.dataset_id)
     if dataset is None or dataset.archived:
         raise HTTPException(422, "That dataset is not here.")
@@ -204,7 +231,7 @@ def prepare_run(session: Session, body: NewRun) -> Prepared:
 
 def create_run(s: Services, body: NewRun, experiment_id: int | None = None) -> int:
     with Session(s.engine) as session:
-        p = prepare_run(session, body)
+        p = prepare_run(session, body, s.converter.info().versions)
         run = Run(
             experiment_id=experiment_id,
             model_id=p.model.id,

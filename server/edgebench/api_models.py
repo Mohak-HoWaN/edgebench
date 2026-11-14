@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 from starlette.background import BackgroundTask
 
-from . import calibration, queue
+from . import calibration, compat, queue
 from .artifacts import TooLarge
 from .matrix import BY_NAME
 from .model_jobs import add_variant, cancel_variant, ensure_matrix, register_artifact, retry_variant
@@ -44,6 +44,8 @@ class VariantOut(BaseModel):
     verify: dict[str, Any] | None
     error: str | None
     has_log: bool
+    built_with: dict[str, str] | None  # converter library versions that made it; None: before they were recorded
+    stale: str | None  # why it no longer matches the converter (rebuild it), when it does not
     updated_at: datetime
 
 
@@ -59,6 +61,7 @@ class ModelOut(BaseModel):
     parameters: int | None
     gflops: float | None
     class_names: list[str] | None
+    card: dict[str, Any] | None  # where the file came from and whether this converter can read it (compat.check)
     sha256: str | None
     created_at: datetime
     variant_counts: dict[str, int]
@@ -93,7 +96,7 @@ def services(request: Request) -> Services:
     return s
 
 
-def _variant_out(v: Variant) -> VariantOut:
+def _variant_out(v: Variant, versions: dict[str, str]) -> VariantOut:
     assert v.id is not None
     return VariantOut(
         id=v.id,
@@ -110,12 +113,15 @@ def _variant_out(v: Variant) -> VariantOut:
         verify=v.verify,
         error=v.error,
         has_log=bool(v.log),
+        built_with=v.toolchain,
+        stale=compat.stale_reason(v.toolchain, versions) if v.state == "ready" else None,
         updated_at=v.updated_at,
     )
 
 
-def _model_out(session: Session, m: MlModel, with_variants: bool) -> ModelOut:
+def _model_out(s: Services, session: Session, m: MlModel, with_variants: bool) -> ModelOut:
     assert m.id is not None
+    versions = s.converter.info().versions
     variants = list(session.exec(select(Variant).where(Variant.model_id == m.id).order_by(col(Variant.id))).all())
     counts: dict[str, int] = {}
     for v in variants:
@@ -132,10 +138,11 @@ def _model_out(session: Session, m: MlModel, with_variants: bool) -> ModelOut:
         parameters=m.parameters,
         gflops=m.gflops,
         class_names=m.class_names,
+        card=m.card,
         sha256=m.artifact_sha256,
         created_at=m.created_at,
         variant_counts=counts,
-        variants=[_variant_out(v) for v in variants] if with_variants else None,
+        variants=[_variant_out(v, versions) for v in variants] if with_variants else None,
     )
 
 
@@ -154,19 +161,28 @@ async def converter_status(request: Request) -> ConverterOut:
     )
 
 
+@router.post("/api/converter/refresh", dependencies=guarded)
+async def converter_refresh(request: Request) -> ConverterOut:
+    """Look at the converter environment again, for example after upgrading a library in it."""
+    info = await asyncio.to_thread(services(request).converter.info, True)
+    return ConverterOut(
+        available=info.available, message=info.message, python=info.python, versions=info.versions, missing=info.missing
+    )
+
+
 @router.get("/api/models")
 def list_models(request: Request) -> list[ModelOut]:
     with Session(services(request).engine) as session:
         rows = session.exec(
             select(MlModel).where(col(MlModel.archived).is_(False)).order_by(col(MlModel.id).desc())
         ).all()
-        return [_model_out(session, m, False) for m in rows]
+        return [_model_out(services(request), session, m, False) for m in rows]
 
 
 @router.get("/api/models/{model_id}")
 def get_model(model_id: int, request: Request) -> ModelOut:
     with Session(services(request).engine) as session:
-        return _model_out(session, _model_or_404(session, model_id), True)
+        return _model_out(services(request), session, _model_or_404(session, model_id), True)
 
 
 @router.post("/api/models", status_code=201, dependencies=guarded)
@@ -204,14 +220,14 @@ async def upload_model(request: Request, response: Response, x_filename: str = H
         ).first()
         if existing is not None:
             response.status_code = 200  # the same file again: show the model that is already here
-            return _model_out(session, existing, False)
+            return _model_out(services(request), session, existing, False)
         model = MlModel(name=Path(name).stem, filename=name, size_bytes=size, artifact_sha256=sha, status="inspecting")
         session.add(model)
         session.commit()
         session.refresh(model)
         assert model.id is not None
         model_id = model.id
-        out = _model_out(session, model, False)
+        out = _model_out(services(request), session, model, False)
     queue.enqueue(s.engine, "inspect", {"model_id": model_id})
     s.publish({"type": "model.updated", "id": model_id})
     return out
@@ -232,7 +248,7 @@ def reread_model(model_id: int, request: Request) -> ModelOut:
     queue.enqueue(s.engine, "inspect", {"model_id": model_id})
     s.publish({"type": "model.updated", "id": model_id})
     with Session(s.engine) as session:
-        return _model_out(session, _model_or_404(session, model_id), True)
+        return _model_out(services(request), session, _model_or_404(session, model_id), True)
 
 
 @router.post("/api/models/{model_id}/convert", dependencies=guarded)
@@ -244,7 +260,7 @@ async def convert_model(model_id: int, request: Request) -> ModelOut:
             raise HTTPException(409, "This model has not been read yet, so it cannot be converted.")
     await asyncio.to_thread(ensure_matrix, s, model_id)
     with Session(s.engine) as session:
-        return _model_out(session, _model_or_404(session, model_id), True)
+        return _model_out(services(request), session, _model_or_404(session, model_id), True)
 
 
 @router.post("/api/models/{model_id}/variants", status_code=201, dependencies=guarded)
@@ -262,7 +278,7 @@ async def add_custom_variant(model_id: int, body: NewVariant, request: Request) 
             raise HTTPException(409, "This model has not been read yet, so it cannot be converted.")
     await asyncio.to_thread(add_variant, s, model_id, body.op, body.imgsz, simplify=body.simplify)
     with Session(s.engine) as session:
-        return _model_out(session, _model_or_404(session, model_id), True)
+        return _model_out(services(request), session, _model_or_404(session, model_id), True)
 
 
 @router.post("/api/models/{model_id}/int8", status_code=201, dependencies=guarded)
@@ -289,7 +305,7 @@ async def add_int8_variant(model_id: int, body: NewInt8, request: Request) -> Mo
         raise HTTPException(422, str(exc)) from None
     await asyncio.to_thread(add_variant, s, model_id, body.op, imgsz, calibration_plan=plan)
     with Session(s.engine) as session:
-        return _model_out(session, _model_or_404(session, model_id), True)
+        return _model_out(services(request), session, _model_or_404(session, model_id), True)
 
 
 @router.delete("/api/models/{model_id}", status_code=204, dependencies=guarded)
@@ -323,9 +339,12 @@ def retry(variant_id: int, request: Request) -> VariantOut:
     with Session(s.engine) as session:
         _variant_or_404(session, variant_id)
     if not retry_variant(s, variant_id):
-        raise HTTPException(409, "Only a failed, unavailable or cancelled conversion can be retried.")
+        raise HTTPException(
+            409,
+            "Only a failed, unavailable or cancelled conversion, or one built by an older converter, can be retried.",
+        )
     with Session(s.engine) as session:
-        return _variant_out(_variant_or_404(session, variant_id))
+        return _variant_out(_variant_or_404(session, variant_id), services(request).converter.info().versions)
 
 
 @router.post("/api/variants/{variant_id}/cancel", dependencies=guarded)
@@ -336,7 +355,7 @@ def cancel(variant_id: int, request: Request) -> VariantOut:
     if not cancel_variant(s, variant_id):
         raise HTTPException(409, "Only a conversion that is waiting or running can be cancelled.")
     with Session(s.engine) as session:
-        return _variant_out(_variant_or_404(session, variant_id))
+        return _variant_out(_variant_or_404(session, variant_id), services(request).converter.info().versions)
 
 
 def _bundle_files(s: Services, v: Variant) -> list[Path]:

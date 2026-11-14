@@ -31,6 +31,9 @@ def main(pt: Path) -> dict[str, object]:
         names = getattr(model, "names", None) or {}
         ordered = [str(names[i]) for i in sorted(names)] if isinstance(names, dict) else [str(n) for n in names]
         args = getattr(model, "args", None) or {}
+        ckpt = yolo.ckpt if isinstance(getattr(yolo, "ckpt", None), dict) else {}
+        train_args = ckpt.get("train_args") if isinstance(ckpt.get("train_args"), dict) else {}
+        head = model.model[-1] if hasattr(model, "model") else None
         imgsz = args.get("imgsz", 640) if isinstance(args, dict) else getattr(args, "imgsz", 640)
         imgsz = int(imgsz[0] if isinstance(imgsz, (list, tuple)) else imgsz)
         params = sum(p.numel() for p in model.parameters())
@@ -49,6 +52,10 @@ def main(pt: Path) -> dict[str, object]:
             "parameters": int(params),
             "gflops": gflops,
             "ultralytics": ultralytics.__version__,
+            # Where the file came from, so the server can tell whether this library can read it (server/edgebench/compat.py)
+            "trained_with": str(ckpt["version"]) if ckpt.get("version") else None,
+            "train_model": str(train_args["model"]) if train_args.get("model") else None,
+            "head": {"type": type(head).__name__, "reg_max": getattr(head, "reg_max", None)} if head is not None else None,
         }
 
 

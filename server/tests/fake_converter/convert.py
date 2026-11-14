@@ -17,10 +17,26 @@ from typing import Any
 
 behaviors = dict(item.split("=", 1) for item in os.environ.get("FAKE_BEHAVIOR", "").split(",") if "=" in item)
 
+
+def fake_ultralytics() -> str:
+    """The library version this stand-in claims: a file the browser tests can rewrite, else FAKE_ULTRALYTICS, else 0."""
+    path = os.environ.get("FAKE_ULTRALYTICS_FILE")
+    if path and os.path.exists(path):
+        return open(path, encoding="utf-8").read().strip()
+    return os.environ.get("FAKE_ULTRALYTICS", "0")
+
+
 if "--probe" in sys.argv:
     print(
         "RESULT "
-        + json.dumps({"ok": True, "versions": {"torch": "0", "ultralytics": "0"}, "missing": ["ncnn"], "python": "3"})
+        + json.dumps(
+            {
+                "ok": True,
+                "versions": {"torch": "0", "ultralytics": fake_ultralytics()},
+                "missing": ["ncnn"],
+                "python": "3",
+            }
+        )
     )
     sys.exit(0)
 

@@ -126,7 +126,10 @@ function ModelChoices({
   onChange: (next: string[]) => void;
 }) {
   const detail = useModel(model.id);
-  const ready = (detail.data?.variants ?? []).filter((v) => v.state === "ready");
+  const finished = (detail.data?.variants ?? []).filter((v) => v.state === "ready");
+  // A conversion an older converter built cannot be run: its result would prove little (rebuild it on the model page).
+  const ready = finished.filter((v) => !v.stale);
+  const stale = finished.filter((v) => v.stale);
   const all = [...ready.map((v) => String(v.id)), BASELINE];
   const toggle = (key: string) => {
     onChange(picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key]);
@@ -174,6 +177,16 @@ function ModelChoices({
               }}
             />
             {label(v.id)}
+          </label>
+        ))}
+        {stale.map((v) => (
+          <label
+            key={v.id}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+            title={v.stale ?? ""}
+          >
+            <input type="checkbox" disabled checked={false} readOnly />
+            {v.format} {v.precision}: needs a rebuild
           </label>
         ))}
         <label className="flex items-center gap-2 text-sm">

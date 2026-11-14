@@ -349,6 +349,7 @@ export default function ExperimentDetail() {
   const e = experiment.data;
   const total = Object.values(e.counts).reduce((a, b) => a + b, 0);
   const finished = total - (e.counts.queued ?? 0) - (e.counts.running ?? 0);
+  const diagnosed = [...new Set((e.runs ?? []).flatMap((r) => r.diagnosis))];
 
   return (
     <>
@@ -364,6 +365,16 @@ export default function ExperimentDetail() {
         {e.notes || undefined}
       </PageHeader>
 
+      {diagnosed.length ? (
+        <div role="alert" className="mb-4 max-w-prose border-l-2 border-warn pl-4 text-sm">
+          <p className="font-medium">Check the tools before judging the model</p>
+          <ul className="list-disc pl-5">
+            {diagnosed.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <p role="status" className="flex items-center gap-2 text-sm font-medium">
           {e.status === "running" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}

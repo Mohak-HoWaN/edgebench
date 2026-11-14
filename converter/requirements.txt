@@ -1,6 +1,6 @@
 # The converter environment (verified 2026-11-10; same pins as the Phase 0 spikes). torch and torchvision are installed
 # first from PyTorch's own index, see README.md and constraints-*.txt.
-ultralytics==8.3.248
+ultralytics==8.4.212  # 8.4 reads YOLO26 (8.3 loads it silently and decodes it wrongly)
 onnx==1.21.0
 onnxruntime==1.25.1
 onnxslim==0.1.98

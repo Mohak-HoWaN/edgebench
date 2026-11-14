@@ -55,6 +55,7 @@ export default function ModelDetail() {
   const m = model.data;
   const variants = m.variants ?? [];
   const notReady = variants.filter((v) => v.state !== "ready").length;
+  const staleCount = variants.filter((v) => v.stale).length;
   const busy = variants.some((v) => v.state === "pending" || v.state === "converting");
   const facts = [
     m.task,
@@ -91,6 +92,13 @@ export default function ModelDetail() {
         </Link>
       </p>
       <PageHeader title={m.name}>{facts.join(", ") || m.filename}</PageHeader>
+      {m.card?.trained_with || m.card?.converter ? (
+        <p className="-mt-2 mb-4 text-xs text-muted-foreground">
+          Trained with Ultralytics {m.card.trained_with ?? "an unknown version"}
+          {m.card.architecture ? ` (${m.card.architecture})` : ""}; this converter has{" "}
+          {m.card.converter ?? "an unknown version"}.
+        </p>
+      ) : null}
 
       {m.status === "inspecting" ? (
         <p role="status" className="mb-6 flex items-center gap-2 text-sm">
@@ -102,6 +110,29 @@ export default function ModelDetail() {
         <p role="alert" className="mb-6 max-w-prose border-l-2 border-destructive pl-4 text-sm">
           {m.error}
         </p>
+      ) : null}
+      {m.status === "incompatible" ? (
+        <div
+          role="alert"
+          className="mb-6 max-w-prose space-y-2 border-l-2 border-warn pl-4 text-sm"
+        >
+          <p className="font-medium">This converter cannot read this model yet</p>
+          <p>{m.error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={reread.isPending}
+            onClick={() => {
+              reread.mutate(m.id, {
+                onError: (e) => {
+                  toast.error(e.message);
+                },
+              });
+            }}
+          >
+            Check again
+          </Button>
+        </div>
       ) : null}
       {m.status === "converter_missing" ? (
         <div className="mb-6">
@@ -133,7 +164,7 @@ export default function ModelDetail() {
             <Button
               size="sm"
               variant="outline"
-              disabled={notReady === 0 || busy || convertMissing.isPending}
+              disabled={(notReady === 0 && staleCount === 0) || busy || convertMissing.isPending}
               onClick={() => {
                 convertMissing.mutate(m.id, {
                   onError: (e) => {
@@ -142,7 +173,9 @@ export default function ModelDetail() {
                 });
               }}
             >
-              Convert what is missing
+              {staleCount > 0
+                ? "Rebuild the conversions an older converter made"
+                : "Convert what is missing"}
             </Button>
             {notReady < variants.length ? (
               <a

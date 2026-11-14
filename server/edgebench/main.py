@@ -28,7 +28,7 @@ from .dataset_versions import register_dataset_handlers
 from .db import make_engine, migrate
 from .events import EventHub
 from .logs import configure_logging
-from .model_jobs import register_handlers
+from .model_jobs import queue_missing_cards, register_handlers
 from .services import Services
 from .worker import Worker
 
@@ -80,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services = Services(settings, engine, store, Converter(settings), hub.publish)
         register_handlers(services)
         register_dataset_handlers(services)
+        queue_missing_cards(services)
         app.state.settings, app.state.engine, app.state.hub, app.state.worker = settings, engine, hub, worker
         app.state.services = services
         app.state.started = time.monotonic()
