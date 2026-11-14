@@ -20,7 +20,7 @@ const COLOURS = [
   "#eab308",
 ];
 
-interface Box {
+export interface Box {
   x1: number;
   y1: number;
   x2: number;
@@ -32,7 +32,7 @@ interface Box {
 
 /** A picture with boxes over it, positioned by percentage so they follow however the picture is scaled. A label wraps instead of
  * being cut, sits above its box (inside it when the box touches the top) and grows leftwards from boxes on the right half. */
-function Boxed({ src, alt, boxes }: { src: string; alt: string; boxes: Box[] }) {
+export function Boxed({ src, alt, boxes }: { src: string; alt: string; boxes: Box[] }) {
   return (
     <div className="relative overflow-hidden rounded-md border bg-muted">
       <img src={src} alt={alt} loading="lazy" className="block w-full" />

@@ -10,6 +10,7 @@ const PATHS = [
   "/devices",
   "/experiments/new",
   "/results",
+  "/compare",
   "/reports",
   "/settings",
   "/no/such/page",

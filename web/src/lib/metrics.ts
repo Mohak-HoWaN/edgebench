@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Accuracy, RunInfo } from "./runs";
+import type { Accuracy, RunInfo } from "./runs.ts";
 
 /**
  * A measurement of a run. None of these is "the" way to judge a model: which ones matter depends on what the model is for, so the
@@ -29,7 +29,7 @@ const acc = (run: RunInfo): Accuracy | undefined =>
   run.result?.accuracy?.available ? run.result.accuracy : undefined;
 const total = (run: RunInfo) => run.result?.speed?.stages.total;
 /** The headline median: the mean of the repeats' medians. None when every repeat was throttled (the run is not comparable). */
-const headline = (run: RunInfo): number | undefined =>
+export const headline = (run: RunInfo): number | undefined =>
   run.latency ? (run.latency.valid ? run.latency.p50_ms : undefined) : total(run)?.p50;
 /** A speed metric that is missing because the run was throttled, not because it was never measured. */
 export const throttled = (run: RunInfo) => run.status === "done" && run.latency?.valid === false;

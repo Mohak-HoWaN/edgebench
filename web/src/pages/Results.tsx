@@ -1,5 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { RunExplorer } from "@/components/RunExplorer";
+import { useRuns } from "@/lib/runs";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -76,6 +78,9 @@ function Row({ e, onOpen }: { e: ExperimentInfo; onOpen: () => void }) {
 
 export default function Results() {
   const experiments = useExperiments();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("view") === "runs" ? "runs" : "experiments";
+  const allRuns = useRuns();
   const navigate = useNavigate();
   const order = usePriority((s) => s.order);
   const body = useRef<HTMLTableSectionElement>(null);
@@ -98,60 +103,91 @@ export default function Results() {
     <>
       <PageHeader
         title="Results"
-        hint="One row per experiment; open one to see every model variant compared in it. The Best columns are your first three metrics from Settings, in that order. Keyboard: Up and Down move between experiments, Enter opens the one you are on."
+        hint="Experiments: one row each; open one to see every model variant compared in it. The Best columns are your first three metrics from Settings, in that order. Keyboard: Up and Down move between experiments, Enter opens the one you are on. All runs: every run in one table to search, sort, group, save as a view, tick and compare, or take as CSV."
       />
-      {experiments.isPending ? (
-        <div aria-busy="true" aria-label="Loading experiments">
-          <Skeleton className="h-10 w-full max-w-3xl" />
-        </div>
-      ) : experiments.isError ? (
-        <p className="text-sm">The experiments could not be loaded: {experiments.error.message}</p>
-      ) : experiments.data.length === 0 ? (
-        <EmptyState
-          title="No results yet"
-          action={{ label: "Plan an experiment", to: "/experiments/new" }}
-        >
-          An experiment compares model variants on a dataset and shows up here as one row.
-        </EmptyState>
-      ) : (
+      <div role="tablist" aria-label="Results views" className="mb-4 flex gap-1 border-b">
+        {(["experiments", "runs"] as const).map((v) => (
+          <button
+            key={v}
+            role="tab"
+            type="button"
+            aria-selected={tab === v}
+            onClick={() => {
+              setParams(v === "runs" ? { view: "runs" } : {}, { replace: true });
+            }}
+            className={`border-b-2 px-3 py-2 text-sm ${tab === v ? "border-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {v === "experiments" ? "Experiments" : "All runs"}
+          </button>
+        ))}
+      </div>
+      {tab === "runs" ? (
+        allRuns.isPending ? (
+          <Skeleton aria-busy="true" aria-label="Loading runs" className="h-10 w-full max-w-3xl" />
+        ) : allRuns.isError ? (
+          <p className="text-sm">The runs could not be loaded: {allRuns.error.message}</p>
+        ) : (
+          <RunExplorer runs={allRuns.data} />
+        )
+      ) : null}
+      {tab === "runs" ? null : (
         <>
-          <div className="overflow-x-auto">
-            <table
-              className="w-full min-w-[52rem] max-w-6xl text-left text-sm"
-              onKeyDown={onKeyDown}
+          {experiments.isPending ? (
+            <div aria-busy="true" aria-label="Loading experiments">
+              <Skeleton className="h-10 w-full max-w-3xl" />
+            </div>
+          ) : experiments.isError ? (
+            <p className="text-sm">
+              The experiments could not be loaded: {experiments.error.message}
+            </p>
+          ) : experiments.data.length === 0 ? (
+            <EmptyState
+              title="No results yet"
+              action={{ label: "Plan an experiment", to: "/experiments/new" }}
             >
-              <caption className="sr-only">Experiments, newest first</caption>
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Experiment
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Dataset
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Device and date
-                  </th>
-                  {shown.map((m) => (
-                    <th key={m.key} scope="col" className="py-2 pr-4 font-medium">
-                      Best {m.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody ref={body}>
-                {experiments.data.map((e) => (
-                  <Row
-                    key={e.id}
-                    e={e}
-                    onOpen={() => {
-                      void navigate(`/experiments/${String(e.id)}`);
-                    }}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+              An experiment compares model variants on a dataset and shows up here as one row.
+            </EmptyState>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table
+                  className="w-full min-w-[52rem] max-w-6xl text-left text-sm"
+                  onKeyDown={onKeyDown}
+                >
+                  <caption className="sr-only">Experiments, newest first</caption>
+                  <thead>
+                    <tr className="border-b">
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Experiment
+                      </th>
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Dataset
+                      </th>
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Device and date
+                      </th>
+                      {shown.map((m) => (
+                        <th key={m.key} scope="col" className="py-2 pr-4 font-medium">
+                          Best {m.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody ref={body}>
+                    {experiments.data.map((e) => (
+                      <Row
+                        key={e.id}
+                        e={e}
+                        onOpen={() => {
+                          void navigate(`/experiments/${String(e.id)}`);
+                        }}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </>

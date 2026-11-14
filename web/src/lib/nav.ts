@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  GitCompare,
   Cpu,
   Database,
   FileText,
@@ -74,6 +75,7 @@ export const NAV: NavItem[] = [
     ],
   },
   { to: "/results", label: "Results", icon: BarChart3, chord: "r", group: "experiments" },
+  { to: "/compare", label: "Compare", icon: GitCompare, chord: "c", group: "experiments" },
   { to: "/reports", label: "Reports", icon: FileText, chord: "p", group: "experiments" },
   {
     to: "/settings",

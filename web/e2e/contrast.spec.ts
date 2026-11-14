@@ -51,6 +51,8 @@ const BOUNDARY: [string, string][] = [
   ["input", "background"],
   ["input", "card"],
   ["ring", "background"],
+  ["series-1", "card"], // chart marks (dataviz: 3:1 against the surface)
+  ["series-2", "card"],
 ];
 
 for (const [name, selector] of [

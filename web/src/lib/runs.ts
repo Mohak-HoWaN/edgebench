@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, getJson, send } from "./models";
+import { ApiError, getJson, send } from "./models.ts";
 
 export type RunStatus =
   "queued" | "running" | "done" | "failed" | "unavailable" | "cancelled" | "lost";
@@ -88,6 +88,26 @@ export interface Accuracy {
     { ap50: number; ap50_95: number; instances: number; images: number; predictions: number }
   >;
   confusion?: { labels: string[]; matrix: number[][] };
+  /** Precision, recall and F1 at 51 confidence cut-offs, overall and per class (runs made after this was added). */
+  curves?: {
+    conf: number[];
+    all: { precision: number[]; recall: number[]; f1: number[] };
+    per_class: Record<string, { precision: number[]; recall: number[]; f1: number[] }>;
+  };
+  /** Detections per confidence bin (20 bins from 0 to 1). */
+  score_hist?: number[];
+  /** Accuracy of each capture source on its own. */
+  by_source?: Record<
+    string,
+    {
+      images: number;
+      instances: number;
+      map50: number;
+      map50_95: number;
+      precision: number;
+      recall: number;
+    }
+  >;
 }
 
 export interface RunResult {
@@ -106,6 +126,8 @@ export interface RunResult {
     stages: Record<"preprocess" | "inference" | "postprocess" | "total", Stage>;
     repeats_requested?: number;
     repeats?: Repeat[];
+    /** Every timed iteration of the kept repeats, in ms. */
+    total_ms?: number[];
     valid_repeats?: number;
     latency_valid?: boolean;
   };
@@ -116,6 +138,15 @@ export interface RunResult {
     sources?: Record<string, string | null>;
     start_clock_mhz?: number | null;
     run?: TelemetryWindow;
+    /** The run's readings thinned to about 160 points, seconds from the first repeat's start. null: not available. */
+    series?: {
+      t: number[];
+      temp_c: (number | null)[];
+      clock_mhz: (number | null)[];
+      cpu: (number | null)[];
+      throttled: (boolean | null)[];
+      repeats: { start: number; end: number; valid: boolean }[];
+    };
   };
   environment?: {
     logical_cores: number | null;
@@ -138,6 +169,12 @@ export interface RunInfo {
   variant_id: number | null;
   variant_label: string;
   runtime: string;
+  /** ONNX, OpenVINO, ncnn, TorchScript, or PyTorch for the baseline. */
+  format: string;
+  precision: string;
+  /** The converted file(s), or the .pt itself for the baseline. */
+  size_bytes: number | null;
+  imgsz: number | null;
   dataset_id: number | null;
   dataset_name: string | null;
   dataset_version: number | null;

@@ -39,6 +39,9 @@
   --color-background: var(--background);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -72,6 +75,10 @@
   --ring: #0b6e78;
   --ok: #17703a;
   --warn: #9a5b00;
+  /* Chart series: validated with the dataviz validator on the card surface (3:1, colour-blind separation); shape is the second cue. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a; /* 2.8:1 on the card: labels and a table view carry it, as the dataviz relief rule asks */
   --radius: 0.5rem;
   --sidebar: #eceff3;
   --sidebar-foreground: #14181f;
@@ -105,6 +112,9 @@
   --ring: #4cc2cb;
   --ok: #5fd08a;
   --warn: #f0b252;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
   --sidebar: #10151c;
   --sidebar-foreground: #e6e9ee;
   --sidebar-primary: #4cc2cb;
@@ -122,6 +132,8 @@
   html {
     @apply font-sans;
     color-scheme: light;
+    /* Keep a focused or linked element clear of the sticky header and the chart index. */
+    scroll-padding-top: 6.5rem;
   }
   html.dark {
     color-scheme: dark;

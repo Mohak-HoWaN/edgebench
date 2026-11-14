@@ -1,9 +1,13 @@
+import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, Section } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHealth } from "@/lib/api";
+import { useDriftLimits } from "@/lib/drift";
 import { formatDuration } from "@/lib/format";
+import { highlights } from "@/lib/highlights";
+import { useRuns } from "@/lib/runs";
 
 function Row({ term, children }: { term: string; children: React.ReactNode }) {
   return (
@@ -67,6 +71,40 @@ function ServerSection() {
   );
 }
 
+function Highlights() {
+  const runs = useRuns();
+  const band = useDriftLimits((s) => s.maxMapDropPoints);
+  const found = highlights(runs.data ?? [], band);
+  if (found.length === 0)
+    return (
+      <EmptyState
+        title="Nothing to highlight yet"
+        action={{ label: "Plan an experiment", to: "/experiments/new" }}
+      >
+        Once two or more runs have finished on the same dataset version and device, the fastest one
+        that is still accurate enough is shown here, with the rule it was picked by.
+      </EmptyState>
+    );
+  return (
+    <ul className="max-w-prose space-y-4" aria-label="Highlights">
+      {found.map((h) => (
+        <li key={h.place}>
+          <p className="text-sm font-medium">{h.sentence}</p>
+          <p className="text-xs text-muted-foreground">
+            {h.rule}{" "}
+            <Link
+              to={`/compare?runs=${h.compare.join(",")}&ref=${String(h.best.id)}`}
+              className="text-primary underline underline-offset-4"
+            >
+              Compare them
+            </Link>
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Dashboard() {
   return (
     <>
@@ -76,6 +114,12 @@ export default function Dashboard() {
       />
       <Section title="Server">
         <ServerSection />
+      </Section>
+      <Section
+        title="Highlights"
+        hint="Computed from your runs, with the rule shown. The allowed accuracy drop is the one in Settings."
+      >
+        <Highlights />
       </Section>
       <Section title="Recent experiments">
         <EmptyState

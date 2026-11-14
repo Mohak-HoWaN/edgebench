@@ -104,6 +104,19 @@ bypasses. Do not widen its allowlists without checking against real checkpoints 
 POST/DELETE against cross-site pages. Tests use a stand-in converter (`server/tests/fake_converter`, driven by `FAKE_BEHAVIOR`); the one
 real end-to-end test (`tests/test_real_converter.py`) skips when `spikes/.venv` and a sample model are absent.
 
+**Compare page and charts (Phase 6).** `pages/Compare.tsx` compares any finished runs (up to 12, 3 models; the choice is in `?runs=&ref=`). The logic is pure
+and tested without a browser: `lib/compare/subjects.ts` (identity of a run on a chart: colour = model, shape = format, fill = precision; suggestions;
+what differs), `builders.ts` (the numbers behind each of the 17 charts; an empty list means "nothing to draw"), `interpret.ts` (one rule, one sentence,
+each tested both ways in `e2e/compare.spec.ts`). Charts are plain SVG in `components/charts/` (`kit.tsx` has the frame, legend, readouts and table
+toggle); `components/compare/CompareCharts.tsx` is the one place that wires a builder to a chart. The agent records curves, a score histogram, accuracy
+per capture source and a telemetry series for the charts; older runs lack them and the charts say so. Import `.ts` extensions in the pure modules (the
+Node test runs them directly); chart colours are `--series-1..3` (validated with the dataviz script; do not add a fourth).
+
+The Compare page is "answer first": `verdict.ts` (limits plus the owner's priorities give the pick and why the others lost), `spec.ts` (the grouped spec sheet), then the chart tabs
+(`ChartTabs.tsx` lists which chart is under which question). Elsewhere in Phase 6: `failures.py` (the failure list and its annotation export, same rules as the confusion matrix),
+`lib/explorer.ts` and `RunExplorer.tsx` (the All runs table: fixed-height rows, only the visible window drawn), `lib/highlights.ts` (dashboard). Test fixtures for these are built by
+`web/e2e/fixtures/compare-runs.ts`; page tests stand in for `/api/runs` with `page.route`, so a fixture must carry everything the page reads.
+
 **Model compatibility (guards G1 to G5).** A checkpoint made by a newer Ultralytics than the converter has is not refused by the library: it loads and
 is decoded wrongly, and the PyTorch-versus-converted check passes because both sides share the wrong reading. So `inspect_pt.py` also reports the file's
 own `version` / `train_args.model`, `compat.py` (pure) turns that into a card on the model (`incompatible` blocks conversion, with a plain message that

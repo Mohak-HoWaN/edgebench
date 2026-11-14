@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { EmptyState } from "@/components/EmptyState";
+import { FailureBrowser } from "@/components/FailureBrowser";
 import { Info } from "@/components/Info";
 import { Insights } from "@/components/Insights";
 import { PageHeader, Section } from "@/components/PageHeader";
@@ -292,6 +293,15 @@ function Outcome({ r, siblings }: { r: RunInfo; siblings: RunInfo[] }) {
             <p className="text-sm">n/a</p>
           )}
         </Section>
+        {r.status === "done" && res.accuracy?.available ? (
+          <Section
+            title="Where it goes wrong"
+            id="failures"
+            hint="The annotated pictures with a missed, wrongly named or made-up object at confidence 0.25, worst first. Pick some and take them as a folder (pictures, real labels, the model's answers as starting labels) for the next round of annotation."
+          >
+            <FailureBrowser run={r} />
+          </Section>
+        ) : null}
         <Section
           title="Speed per image"
           hint="Time for one image, start to finish, split into preparing the picture, running the model and decoding the answer. The first call is slow and is left out. The table is pooled over the repeats that counted; repeats that were throttled are listed above it and left out."

@@ -14,6 +14,12 @@ const PAGES = [
     empty: "Something is missing before you can run",
   },
   { link: "Results", path: "/results", heading: "Results", empty: "No results yet" },
+  {
+    link: "Compare",
+    path: "/compare",
+    heading: "Compare",
+    empty: "Nothing to compare yet",
+  },
   { link: "Reports", path: "/reports", heading: "Reports", empty: "No reports yet" },
   { link: "Settings", path: "/settings", heading: "Settings", empty: "Appearance" },
 ];
@@ -102,9 +108,9 @@ test("Ctrl+K opens the palette and Enter goes to the match", async ({ page }) =>
   await open(page, "/");
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.type("models");
+  await page.keyboard.type("datasets");
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL("/models");
+  await expect(page).toHaveURL("/datasets");
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 

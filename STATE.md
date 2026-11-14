@@ -437,3 +437,53 @@ Fixed by restarting the agent that way, and the nine failed runs were run again 
 fingerprint (hardware, packages) on every start (the Devices page and the run diagnosis kept the enrolment-time packages before), and a crashed benchmark's
 message explains the likely cause. `python -m edgebench` finds the converter environment itself (it said "not set up" when started without the script).
 Not checked: a full run of the browser suite after the fingerprint change.
+
+## Phase 6 (second pass): the Compare page, all 17 charts (2026-11-14) - PC only
+Owner feedback on the first slice: only two models, one dataset and no variant-to-variant comparison, and the charts were missing. Rebuilt as `/compare`
+(sidebar "Compare", `g c`); the two-model page and its logic were deleted. **What can be compared:** any finished runs, mixed freely: different models,
+variants (format, precision), thread counts, dataset versions and devices; up to 12 runs and 3 models at once (colour is the model, and only three colours
+pass the colour-blind check against each other; shape is the format, fill the precision). The selection lives in the address (`?runs=3,7,9&ref=3`);
+with none given the page starts from the first ready-made comparison. **Choosing:** selected-run cards (with a reference radio and remove), "ready-made
+comparisons" worked out from the data (the same variant on different models, every variant of one model, a thread sweep, the same run on several
+devices; the newest run of each), and a filterable list of every run (model, format, precision, threads, dataset, device). The page lists what differs
+between the chosen runs (datasets, devices, threads) and repeats the tools' warnings (`RunInfo.diagnosis`).
+**The 17 charts of `docs/brief-charts-and-families.md`:** scorecard by the owner's priorities; accuracy against speed with the front; size against accuracy
+and against speed; latency distribution (box plot); latency over the run; where the time goes; speed against threads; speed-up over the reference with
+intervals; device comparison; accuracy drift against the reference with the allowed band; accuracy per class; confusion matrix; precision against recall;
+F1 against confidence; score distribution; accuracy by capture source; temperature and clock over the run. Each has its question, how to read it, computed
+sentences with the red flags (`lib/compare/interpret.ts`, every rule tested with a case that triggers it and one that does not), a table view, and an
+honest empty state saying what to select or run. Plain SVG, one shared kit (`components/charts/`), hover and focus readouts with 24 px hit areas.
+**New data (agent, `bench.py`/`evaluate.py`/`repeats.py`, server `RunOut`):** precision, recall and F1 at 51 confidence cut-offs (overall and per class),
+a 20-bin score histogram, accuracy per capture source, the temperature/clock/CPU series (about 160 points), and per run the format, precision, size and
+input size. **Runs made before this lack the curves, source split and series**: those charts say "run them again".
+Checked: server 278, agent 65, browser 182 (6 page tests against fixed runs through a stand-in for `/api/runs`, axe clean in both themes with every
+chart drawn; 19 logic tests without a browser); on the live app a real experiment (v_0.0.0.3_ and v_0.0.1.3_, four variants, 1 and 4 threads, 14 runs) drew
+every chart (devices needs a second device) with axe clean in both themes. Colours checked with the dataviz validator (`--series-1..3`).
+**Not built:** the filterable/sortable results table with CSV export, saved views, the failure browser, dashboard highlights, a model-versus-model
+verdict page beyond the scorecard, more than 3 models at once, phone-width layout (the charts scroll sideways), the device chart with real data (no
+Pi), a heat map of capture-source by variant. The third series colour (aqua) is 2.8:1 on the card: the legend, the table views and direct labels carry it.
+
+## Phase 6 (third pass): simpler Compare page, and the rest of Phase 6 (2026-11-14) - PC only
+Owner: the charts were confusing; research how others do it, copy the best, then finish Phase 6. Research (docs and Baymard's tests, not the live screens
+of the products): MLflow, W&B, Neptune and Edge Impulse start from a table of runs, W&B/Neptune have a "diff only" switch, Edge Impulse checks results
+against budgets, Baymard found "only show differences", grouped rows, sticky run names and 3 to 5 columns read fastest, Artificial Analysis uses one
+headline chart plus a table, Apple offers ready-made comparisons. The owner chose all the recommended options.
+**Compare page, now "answer first":** (1) *The answer* card: a plain-words pick among the runs that meet the owner's limits (at least this accurate, at most
+this slow, at most this big; the accuracy default is the reference's score minus the drop allowed in Settings), why the others lost, and notes (thin
+evidence, the pick flips if the first two priorities swap); `lib/compare/verdict.ts`. (2) *Side by side*: a grouped spec sheet (Accuracy, Speed, Size and
+set-up, The machine) with "Only show differences" on by default, best of each row ticked, sticky run names, reference and remove per column;
+`lib/compare/spec.ts`. (3) *Charts* in five tabs named for questions (best trade-off, faster, more accurate, where does it go wrong, is the machine
+coping), the first ones shown and the rest under "More charts"; a green "meets your limits" area on accuracy against speed. Plain words everywhere with the
+technical name on hover. Limits, tab, reference and runs are in the address.
+**Rest of Phase 6:** *Where it goes wrong* on every run page (`failures.py`, `GET /api/runs/{id}/failures` and `failures.zip`): pictures with a missed, wrongly
+named or made-up object, worst first (the confusion-matrix rules, classes by name), real boxes dashed blue and found boxes red, tick some and take them as a
+folder (pictures, real labels, the model's answers as starting labels, `why.csv`) for the next annotation round; the Compare "mistakes" tab links to it.
+*All runs* view on Results (`lib/explorer.ts`, `RunExplorer.tsx`): search (debounced), filters, sort by any column, group, saved views (browser storage), tick runs
+to compare, CSV of the shown rows; only the rows in view are drawn (500 runs checked). *Dashboard highlights* (`lib/highlights.ts`): the fastest run within the
+allowed points of the best accuracy per dataset version and device, with the rule written out. Runs whose every repeat was throttled read "not clean" and are
+left out of speed rankings.
+Checked: server 285, agent 65, browser 201 (new: 22 comparison-logic, 10 Compare page, 7 explorer-logic, 5 explorer/dashboard/failure page tests; axe clean in both
+themes on the Compare tabs and the All runs table); lint, types and formats clean. The redesigned Compare page was looked at on the live app before the last
+changes to the failure browser and table; those two were tested against stand-ins for the API, not on the live data.
+**Not built:** Parquet export, a capture-source split for every accuracy view, saved views on the server (they live in one browser), phone-width layout,
+more than 3 models at once, a device chart with real data (no Pi). Dashboard "Recent experiments" and "Devices" are still the empty-state placeholders.
