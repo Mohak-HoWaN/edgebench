@@ -210,3 +210,14 @@ def test_an_unreachable_server_at_the_end_of_a_run_does_not_take_the_agent_down(
     monkeypatch.setattr(agent.client, "result", unreachable)
     agent.serve(once=True)  # returns normally instead of raising
     assert status(server, run["id"])["status"] == "running"  # the server never heard; its stale sweep will mark it lost
+
+
+def test_a_restarted_agent_reports_what_it_runs_on_now_not_what_it_had_at_enrolment(
+    server: TestClient, tmp_path: Path
+) -> None:
+    device_id, token = enrolled(server)  # enrolled with a stand-in fingerprint that has no packages
+    assert "packages" not in server.get("/api/devices").json()[0]["fingerprint"]
+    queue_run(server, tmp_path, device_id)
+    make_agent(server, tmp_path, token).serve(once=True)
+    now = server.get("/api/devices").json()[0]["fingerprint"]
+    assert now["python"] == collect()["python"] and "packages" in now

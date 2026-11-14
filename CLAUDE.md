@@ -104,6 +104,12 @@ bypasses. Do not widen its allowlists without checking against real checkpoints 
 POST/DELETE against cross-site pages. Tests use a stand-in converter (`server/tests/fake_converter`, driven by `FAKE_BEHAVIOR`); the one
 real end-to-end test (`tests/test_real_converter.py`) skips when `spikes/.venv` and a sample model are absent.
 
+**Model compatibility (guards G1 to G5).** A checkpoint made by a newer Ultralytics than the converter has is not refused by the library: it loads and
+is decoded wrongly, and the PyTorch-versus-converted check passes because both sides share the wrong reading. So `inspect_pt.py` also reports the file's
+own `version` / `train_args.model`, `compat.py` (pure) turns that into a card on the model (`incompatible` blocks conversion, with a plain message that
+blames the converter, not the model), variants record the converter versions that built them (`Variant.toolchain`, `compat.stale_reason`; stale cells are
+refused in runs and rebuilt on request), and `RunOut.diagnosis` points at the tools when a result looks wrong. `docs/brief-model-compatibility-guards.md`.
+
 **Datasets, agent, experiments and runs (Phase 3).** A dataset is a name and a history of `DatasetVersion`s (`dataset_versions.py`,
 `api_datasets.py`). A version is a manifest (path, SHA-256, size per file); the files are in the artifact store by hash and shared between
 versions. A commit uploads files one by one (`POST .../blobs`, nothing changes yet) and then `POST .../commit` queues the `build_version` job,
@@ -192,7 +198,7 @@ still good is the accuracy check in an experiment that also holds the `.pt` base
   Dashboard mean a real fault. A benchmark has one attempt (lost, never silently repeated).
 - Do not tune thresholds to hide a weak detector; threshold views are read-only. No power or energy measurement (the owner has no meter).
 - Pi work targets a development Pi, not the shop's production Pi (that one is managed through the fleet agent, no SSH).
-- The server binds `127.0.0.1` and has no auth until device tokens exist (Phase 5); do not widen the bind or `allowed_hosts` before that.
+- The server binds `127.0.0.1` by default. Any other `EDGEBENCH_HOST` is refused unless an owner password exists (`python -m edgebench set-password`, ADR 0005); the login is built but **not reviewed by anyone else**, and `allowed_hosts` still has to list the names used.
 - Nothing is pushed without being asked. `data/`, `spikes/`, models (`*.pt`, `*.onnx`, `*.bin`, `*.engine`) and `.env` are git-ignored.
 - State plainly what was not tested. `docker compose up --build` was verified in Phase 1 (see `STATE.md`); re-verify it after changing the
   `Dockerfile`, `server/requirements.txt` or the web build, since the unit and browser tests do not run against the image.

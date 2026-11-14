@@ -52,9 +52,16 @@ class ServerClient:
         return None if response.status_code == 204 else dict(response.json())
 
     def heartbeat(
-        self, job_id: int | None, fraction: float | None, message: str | None, version: str
+        self,
+        job_id: int | None,
+        fraction: float | None,
+        message: str | None,
+        version: str,
+        fingerprint: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body = {"job_id": job_id, "fraction": fraction, "message": message, "agent_version": version}
+        if fingerprint is not None:
+            body["fingerprint"] = fingerprint
         return dict(self._check(self.http.post("/agent/heartbeat", json=body, headers=self._headers())).json())
 
     def result(

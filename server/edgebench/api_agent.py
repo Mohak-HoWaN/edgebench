@@ -55,6 +55,7 @@ class Beat(BaseModel):
     fraction: float | None = None
     message: str | None = None
     agent_version: str | None = None
+    fingerprint: dict[str, Any] | None = None  # sent at agent start: what it runs on may have changed since enrolment
 
 
 class Result(BaseModel):
@@ -161,6 +162,8 @@ def heartbeat(body: Beat, request: Request) -> dict[str, Any]:
     s = services(request)
     with Session(s.engine) as session:
         device = authenticate(session, request)
+        if body.fingerprint:
+            device.fingerprint, device.kind = body.fingerprint, kind_from_fingerprint(body.fingerprint)
         _touch(session, device, body.agent_version)
         if body.job_id is None:
             return {"ok": True, "cancel": False}

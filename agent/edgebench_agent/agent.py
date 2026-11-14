@@ -192,7 +192,12 @@ class Agent:
             return {
                 "ok": False,
                 "kind": "failed",
-                "error": f"The benchmark process stopped unexpectedly (exit code {code}). The agent is still running.",
+                "error": (
+                    f"The benchmark process stopped unexpectedly (exit code {code}). The agent is still running. "
+                    "A crash like this usually means a runtime package in the agent's own Python is broken or clashes "
+                    "with another one: the Devices page lists what this agent has, and scripts/start-agent.ps1 starts "
+                    "it in the environment made for it."
+                ),
                 "log": log_text,
             }
         ok = bool(final.pop("ok", False))
@@ -225,6 +230,10 @@ class Agent:
 
     def serve(self, once: bool = False) -> None:
         """Claim and run jobs until stopped. ``once`` returns after the first job (for tests and trials)."""
+        # What this machine and this Python have can change since enrolment (another environment, a package installed):
+        # say it again at every start, so the Devices page and the run diagnosis never describe an older setup.
+        with contextlib.suppress(httpx.HTTPError):
+            self.client.heartbeat(None, None, None, __version__, collect())
         while not self._stopped.is_set():
             try:
                 job = self.client.claim()

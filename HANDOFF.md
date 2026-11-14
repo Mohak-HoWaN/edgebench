@@ -42,7 +42,7 @@ cd agent  ; ..\.venv-agent\Scripts\python -m pytest tests -q    # 58 tests
 cd web ; npm run typecheck ; npm run lint ; npm run build ; npx playwright test   # build first: the tests serve web/dist
 ```
 Environments (all git-ignored): `.venv` (server, Python 3.12), `.venv-agent` (agent tests: numpy, OpenCV, ONNX Runtime, httpx, plus the
-server's dev requirements), `spikes/.venv` (heavy runtime env: torch 2.6.0+cu124, ultralytics 8.3.248, openvino 2026.1.0, ncnn; `httpx` was
+server's dev requirements), `spikes/.venv` (heavy runtime env: torch 2.6.0+cu124, ultralytics 8.4.212, openvino 2026.1.0, ncnn; `httpx` was
 added for the agent). The converter and the agent both prefer `spikes/.venv` when no `.venv-converter` exists. A converter environment built
 from scratch from `converter/requirements.txt` has never been tried.
 
@@ -62,7 +62,7 @@ first prediction, not the best IoU (copied on purpose in `evaluate.py`); the she
 ## Security
 `.pt` upload runs the pickle scanner (`server/edgebench/ptscan.py`): hardened, **not proven, not a sandbox**; an independent review was cut short.
 The server binds 127.0.0.1 with no user login; devices authenticate with tokens (hashes stored). Phase 3's new surface (agent routes, folder
-import, zip unpacking) has tests but **no independent review**. Do not widen the bind or `allowed_hosts` before Phase 5's review.
+import, zip unpacking) has tests but **no independent review**. Phase 5 added an owner login (ADR 0005, unreviewed); widen the bind only after `set-password`, and never without it.
 
 ## Not verified
 TensorRT; anything on a real Pi; accuracy on JonaRu data; Docker with the converter or the agent (the image has neither; the Phase 3 image

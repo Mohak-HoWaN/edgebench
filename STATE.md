@@ -364,3 +364,76 @@ and `127.0.0.1:8000` are different places and do not share it. Test: `e2e/phase4
   inside the picture). `e2e/websocket.spec.ts` "reconnects after the server closes it" failed once in a full run and passed three times alone: a
   timing flake, not investigated.
 - Not checked: labels on boxes that fill the whole picture, and labels longer than three lines.
+
+## Phase 5: Pi agent and multi-device (started 2026-11-12) - first slice done, rest NOT built
+
+Owner decisions (2026-11-12): the whole site must be reachable from the Pi (and later the internet), so a **login comes first**; network
+modes are the same-network address and Tailscale, LAN first; a development Pi is available for testing, but the owner will test on it
+only once the app is reachable from outside, so **nothing here has touched a real Pi**. ADR: `docs/adr/0005-owner-login-and-exposure.md`.
+
+Built and tested (PC only):
+- Owner login: `server/edgebench/auth.py` (scrypt password in `data/owner.json`, in-memory sessions, `AuthGate` ASGI middleware for `/api` and
+  `/ws`, `Throttle`, `check_bind`), `api_auth.py` (`/api/auth/status|login|logout`), `python -m edgebench set-password`. Off until the file exists;
+  the server refuses a non-loopback `EDGEBENCH_HOST` without it. `/agent/enroll` is throttled (10 wrong tokens / 5 min / address).
+  Web: `Login.tsx`, `lib/auth.ts`, Sign out button, any 401 returns the page to the sign-in form. Tests: `server/tests/test_auth.py` (11),
+  `web/e2e/login.spec.ts` (2; also checks that Node's scrypt and the server's agree).
+- Pi telemetry: `telemetry.decode_throttled` (bits 0-3 now, 16-19 since boot; only "now" flags a run), reasons listed in each window
+  (`throttle_reasons`). Test with `vcgencmd` replaced by a fixture (`test_a_pi_profile_reads_the_throttle_flag_from_a_stand_in_vcgencmd`).
+  Temperature and clock on a Pi come from psutil (`/sys`), not `vcgencmd measure_*`: untested on a Pi.
+
+- Install from the server: `server/edgebench/package.py` builds the agent's source package in memory (`GET /agent/package/<file>`, public,
+  deterministic); the enrolment returns `package_url`; `EDGEBENCH_PUBLIC_URL` sets the address put in commands. The Devices page shows a Pi
+  command (`python3 -m venv ~/edgebench-agent-env && pip install "edgebench-agent[pi] @ <url>" && edgebench-agent --server ... --token ...`)
+  and warns when the address is localhost. `pip install` of the served file was run in a fresh Windows venv and its command started; the
+  `[pi]` extra (pinned aarch64 versions) and the whole command were **not run on a Pi**. Tests: `server/tests/test_package.py`, one browser test.
+
+Checks after this slice: server 262 passed + 2 timing-sensitive tests (`test_websocket_says_hello...`, `test_cells_built_from_onnx_fail...`)
+failed once in the full run and pass alone and together with their modules (not investigated); agent 60; browser 150 before the Devices change,
+the changed Devices tests rerun and pass (full browser suite not rerun after it); ruff, mypy, ESLint, Prettier, tsc clean.
+
+Not built yet: agent self-update and token rotation; server-time
+policy for a Pi with a wrong clock (agents already send offsets, not wall time, but this is not asserted by a test); governor change with
+permission; cooling notes; multi-device wizard and per-device Live Run; TensorRT job on the PC agent; dataset/artifact cache check on ARM.
+Not reviewed by anyone else (login, throttle, bind guard). Not tested: https/Tailscale/tunnel, a reverse proxy (the throttle then sees one address).
+
+## Live run page removed (2026-11-12)
+The owner pointed out that it showed only progress bars, which the experiment and results pages already show, and asked to remove it if it would stay
+like that. Page, route, sidebar entry, `g l` shortcut and "Watch live" links are gone (the experiment page keeps its own progress bar). Not
+built, and waiting for Phase 6 charts: live latency and temperature lines, and a per-device live view.
+
+## Converter upgraded to Ultralytics 8.4.212 (2026-11-14); guards planned, not built
+`v_0.0.1.3_.pt` is YOLO26n (trained with 8.4.208). Under the converter's 8.3.248 it loaded without an error and was decoded wrongly, yet all
+seven variants showed "ready, verified" (the check compares with PyTorch as the same converter loads it). `spikes/.venv` now has ultralytics
+8.4.212 (plus its new dependency `ultralytics-platform` 0.1.111; nothing else changed, torch/numpy/OpenCV pinned by `spikes/constraints.txt`);
+`converter/requirements.txt` and `HANDOFF.md` updated. Checked: the real-converter test passes (yolo11n, all formats); a scratch export of
+v_0.0.1.3 gives ONNX `(1, 12, 8400)` and EdgeBench's decode finds the right class in 6 of 6 Dairy Milk pictures. **Not redone:** the stored
+variants of model 4 (and 2, 3) were built by 8.3.248 and still show "ready"; they are stale until rebuilt. `new_arch/.venv` and
+`project/pipeline` still use 8.3.248 and cannot read YOLO26. Guards against a repeat: `docs/brief-model-compatibility-guards.md` (G1 to G6).
+
+### Compatibility guards G1 to G5 built (2026-11-14) - PC only, G6 not built
+Brief: `docs/brief-model-compatibility-guards.md`. Built: **G1** `converter/inspect_pt.py` reports the checkpoint's `version`, `train_args.model`
+and head type; `server/edgebench/compat.py` (pure) decides: trained with a newer Ultralytics minor than the converter has, or an architecture
+family that needs one (only YOLO26 is listed, `FAMILY_MIN`), means model status `incompatible` with the plain message, **no variants are made**,
+runs on it are refused with the same words; "Check again" re-reads it. **G2** `RunOut.diagnosis` (computed on read): a conversion built by an
+Ultralytics older than the model's, a baseline on a device whose agent has an older one, or recall 0 on labelled objects; shown as "Check the
+tools before judging the model" on the run and experiment pages. **G3** the "Matches PyTorch" hover says it does not prove the converter reads
+the model correctly. **G4** `variants.toolchain` (migration 0006) records the converter library versions; `Variant.stale` says when ready
+cells no longer match (variants made before it existed read "built before versions were recorded"); stale cells are refused in runs and
+experiments (422 with the reason), shown "needs a rebuild" in the wizard, and **Rebuild** / "Rebuild the conversions an older converter made"
+rebuilds them (also `Convert everything`). **G5** model page says "Trained with Ultralytics X (arch); this converter has Y"; Settings has a
+Converter section with its versions and "Check the converter again" (`POST /api/converter/refresh`); the converter probe is now trusted for
+120 s (`INFO_TTL`), so an upgrade shows up without a restart. At start-up, ready models without a card get one (`queue_missing_cards`,
+card only, nothing converted).
+Checked: server 276 tests (12 in `test_compat.py`), agent 60, browser 151 (two new in `compat.spec.ts`, axe clean); migration 0006 applied to a
+copy of the real database (28 variants, all now flagged as built before versions were recorded). **Not run:** the real converter against a
+model that is too new (the converter is now new enough; the check uses the stand-in), the live server on port 8000 was not restarted, so
+it still runs the old code until it is. **G6** (reference accuracy from the Platform) is not built. The 28 existing variants are all flagged stale
+on purpose; rebuild them when ready (the owner said not to rerun v_0.0.1.3 yet).
+
+## Agent environment mix-up and fixes (2026-11-14)
+An experiment ("Exp-1-1.3") failed: the agent had been started by hand with `D:\Anaconda\python.exe`, where `import onnxruntime` (onnxruntime-gpu 1.30
+next to torch 2.14) crashes the interpreter (exit 3221225477), and ncnn/OpenVINO are missing ("not installed"). `scripts/start-agent.ps1` uses `spikes/.venv`.
+Fixed by restarting the agent that way, and the nine failed runs were run again (runs 70 to 78, mAP50-95 0.995 each). Code: the agent now re-sends its
+fingerprint (hardware, packages) on every start (the Devices page and the run diagnosis kept the enrolment-time packages before), and a crashed benchmark's
+message explains the likely cause. `python -m edgebench` finds the converter environment itself (it said "not set up" when started without the script).
+Not checked: a full run of the browser suite after the fingerprint change.
